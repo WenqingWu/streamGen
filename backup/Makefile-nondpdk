@@ -1,0 +1,39 @@
+#
+# Makefile for pktSender.
+#
+
+TARGET = streamGen
+all: $(TARGET)
+
+srcdir		= .
+
+CC		= gcc
+CFLAGS		= -g -O2 
+LDFLAGS		= 
+
+PCAP_CFLAGS	= -I/usr/local/include
+PCAPLIB		= -L/usr/local/lib -lpcap
+
+LNET_CFLAGS	= -I/usr/local/include 
+LNETLIB		= -lnet
+
+LIBS_CFLAGS	= -Ilibnids-1.24/src -Iinclude  $(PCAP_CFLAGS) $(LNET_CFLAGS) 
+# LIBS_CFLAGS += -DNET_QUEUE
+LIBS_CFLAGS += -DUSE_PCAP
+LIBS		= -Llibnids-1.24/src -lnids -lglib-2.0 $(PCAPLIB) $(LNETLIB) -lgthread-2.0 -lnsl -lpthread
+
+
+SRCS = main.c stream_gen.c
+
+OBJS = $(patsubst %.c,%.o,$(SRCS))
+
+$(OBJS) : %.o : %.c
+	$(CC) -c $(CFLAGS) -I. $(LIBS_CFLAGS) $< -o $@
+
+$(TARGET): $(OBJS)
+	$(CC) $(LDFLAGS) $(OBJS) -o $(TARGET) $(LIBS)
+
+clean:
+	rm -f *.o *~ $(TARGET)
+
+# EOF

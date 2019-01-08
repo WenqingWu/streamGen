@@ -1,0 +1,50 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.8	//
+CC	Makefile	/^CC		= gcc$/;"	m
+CFLAGS	Makefile	/^CFLAGS		= -g -O2 -D_BSD_SOURCE$/;"	m
+LDFLAGS	Makefile	/^LDFLAGS		= $/;"	m
+LIBS	Makefile	/^LIBS		= -L..\/src -lnids -lglib-2.0 $(PCAPLIB) $(LNETLIB) -lgthread-2.0 -lnsl $/;"	m
+LIBS_CFLAGS	Makefile	/^LIBS_CFLAGS	= -I..\/src $(PCAP_CFLAGS) $(LNET_CFLAGS)$/;"	m
+LNETLIB	Makefile	/^LNETLIB		= -lnet$/;"	m
+LNET_CFLAGS	Makefile	/^LNET_CFLAGS	= -I\/usr\/local\/include -D_BSD_SOURCE -D__BSD_SOURCE -D__FAVOR_BSD -DHAVE_NET_ETHERNET_H$/;"	m
+LOG_MAX	sniff.c	15;"	d	file:
+PATLEN	overflows.c	46;"	d	file:
+PATTERN	overflows.c	45;"	d	file:
+PCAPLIB	Makefile	/^PCAPLIB		= -L\/usr\/local\/lib -lpcap$/;"	m
+PCAP_CFLAGS	Makefile	/^PCAP_CFLAGS	= -I\/usr\/local\/include$/;"	m
+SZLACZEK	sniff.c	16;"	d	file:
+add_to_path	overflows.c	/^add_to_path (char *path, char *elem, int len)$/;"	f
+adres	overflows.c	/^adres (struct tuple4 addr)$/;"	f
+adres	printall.c	/^adres (struct tuple4 addr)$/;"	f
+adres	segmentor.c	/^adres (struct tuple4 addr)$/;"	f
+adres	sniff.c	/^adres (struct tuple4 addr)$/;"	f
+all_local_ipaddrs_chksum_disable	chksum_ctl.c	/^int all_local_ipaddrs_chksum_disable()$/;"	f
+currdir	overflows.c	/^  char *currdir;$/;"	m	struct:supp	file:
+detect_ftpd	overflows.c	/^detect_ftpd (struct tcp_stream *a_tcp, struct supp **param)$/;"	f
+detect_imap	overflows.c	/^detect_imap (struct tcp_stream *a_tcp)$/;"	f
+do_detect_ftp	overflows.c	/^do_detect_ftp (struct tcp_stream *a_tcp, struct supp **param_ptr)$/;"	f
+do_log	sniff.c	/^do_log (char *adres_txt, char *data, int ile)$/;"	f
+get_addr_from_ifreq	chksum_ctl.c	/^unsigned int get_addr_from_ifreq(struct ifreq *iface)$/;"	f
+get_all_ifaces	chksum_ctl.c	/^static int get_all_ifaces(struct ifreq **ifaces, int *count)$/;"	f	file:
+int_ntoa	overflows.c	25;"	d	file:
+int_ntoa	printall.c	16;"	d	file:
+int_ntoa	segmentor.c	16;"	d	file:
+int_ntoa	sniff.c	18;"	d	file:
+last_newline	overflows.c	/^  int last_newline;$/;"	m	struct:supp	file:
+logfd	sniff.c	/^int logfd;$/;"	v
+main	chksum_ctl.c	/^main()$/;"	f
+main	nids_next.c	/^main ()$/;"	f
+main	overflows.c	/^main ()$/;"	f
+main	printall.c	/^main ()$/;"	f
+main	segmentor.c	/^main ()$/;"	f
+main	sniff.c	/^main ()$/;"	f
+simple_chksum_ctl_example	chksum_ctl.c	/^void simple_chksum_ctl_example()$/;"	f
+sniff_callback	sniff.c	/^sniff_callback (struct tcp_stream *a_tcp, void **this_time_not_needed)$/;"	f
+srcdir	Makefile	/^srcdir		= .$/;"	m
+supp	overflows.c	/^struct supp$/;"	s	file:
+tcp_callback	printall.c	/^tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)$/;"	f
+tcp_callback	segmentor.c	/^tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)$/;"	f
