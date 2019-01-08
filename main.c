@@ -32,6 +32,7 @@ See the file COPYING for license details.
 static const struct rte_eth_conf port_conf_default = { 
     .rxmode = { .max_rx_pkt_len = ETHER_MAX_LEN }
 };
+struct rte_eth_stats stats_start;
 
 volatile bool force_quit;
 
@@ -67,6 +68,9 @@ pcap_t     *pcap_hdl;
 static void
 print_stat(void)
 {
+	struct rte_eth_stats stats_end;
+	rte_eth_stats_get(snd_port, &stats_end);
+
     printf("\n+++++++++++ Statistics for streamGen +++++++++++\n");
 #ifdef USE_DPDK
 #ifdef SEND_THREAD
@@ -75,16 +79,26 @@ print_stat(void)
     for (i = 0; i < nb_snd_thread; ++i) {
         tx_total += th_info[i].stats.tx;
         drop_total += th_info[i].stats.dropped;
-    }
+    }   
 
-    printf("  TX-packets:\t\t\t%ld\n", tx_total);
-    printf("  TX-dropped:\t\t\t%ld\n", drop_total);
+	printf("---------- Statistics from application ---------\n");
+    printf("  TX-packets:\t\t\t%"PRIu64"\n", tx_total);
+    printf("  TX-dropped:\t\t\t%"PRIu64"\n", drop_total);
+    printf("------------- Statistics from NICs -------------\n");
+    printf("  TX-packets:\t\t\t%"PRIu64"\n", stats_end.opackets - stats_start.opackets);
+    printf("  TX-bytes:\t\t\t%"PRIu64"\n", stats_end.obytes - stats_start.obytes);
+    printf("  TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
 #else
-    printf("  TX-packets:\t\t\t%ld\n", port_stat.tx);
-    printf("  TX-dropped:\t\t\t%ld\n", port_stat.dropped);
+	printf("---------- Statistics from application ---------\n");
+    printf("  TX-packets:\t\t\t%"PRIu64"\n", port_stat.tx);
+    printf("  TX-dropped:\t\t\t%"PRIu64"\n", port_stat.dropped);
+    printf("------------- Statistics from NICs -------------\n");
+    printf("  TX-packets:\t\t\t%"PRIu64"\n",stats_end.opackets - stats_start.opackets);
+    printf("  TX-bytes:\t\t\t%"PRIu64"\n", stats_end.obytes - stats_start.obytes);
+    printf("  TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
 #endif
 #else
-    printf("  TX-packets:\t\t\t%ld\n", snd_cnt);
+    printf("  TX-packets:\t\t\t%"PRIu64"\n", snd_cnt);
 #endif
     printf("++++++++++++++++++++++++++++++++++++++++++++++++\n");
 }
@@ -472,7 +486,7 @@ main (int argc, char *argv[])
     argv += ret;
 	
     force_quit = false;
-    is_len_fixed = false;
+	is_len_fixed = false;
 #ifdef USE_PDUMP
 	/* initialize packet capture framework */
 	rte_pdump_init(NULL);
@@ -539,6 +553,7 @@ main (int argc, char *argv[])
 		goto outdoor;
 	}
 	
+	rte_eth_stats_get(snd_port, &stats_start);
 	nids_register_tcp (tcp_callback);
     lcore_main(); 
 	
