@@ -25,7 +25,7 @@ See the file COPYING for license details.
 #include <rte_lcore.h>
 #include <rte_malloc.h>
 
-#ifdef RTE_LIBRTE_PDUMP
+#ifdef USE_PDUMP
 #include <rte_pdump.h>
 #endif
 
@@ -67,6 +67,7 @@ pcap_t     *pcap_hdl;
 static void
 print_stat(void)
 {
+    printf("\n+++++++++++ Statistics for streamGen +++++++++++\n");
 #ifdef USE_DPDK
 #ifdef SEND_THREAD
     int i;
@@ -75,15 +76,17 @@ print_stat(void)
         tx_total += th_info[i].stats.tx;
         drop_total += th_info[i].stats.dropped;
     }
-    printf("total send: %ld\n", tx_total);
-    printf("dropped: %ld\n", drop_total);
+
+    printf("  TX-packets:\t\t\t%ld\n", tx_total);
+    printf("  TX-dropped:\t\t\t%ld\n", drop_total);
 #else
-    printf("total send: %ld\n", port_stat.tx);
-    printf("dropped: %ld\n", port_stat.dropped);
+    printf("  TX-packets:\t\t\t%ld\n", port_stat.tx);
+    printf("  TX-dropped:\t\t\t%ld\n", port_stat.dropped);
 #endif
 #else
-    printf("total send: %ld\n", snd_cnt);
+    printf("  TX-packets:\t\t\t%ld\n", snd_cnt);
 #endif
+    printf("++++++++++++++++++++++++++++++++++++++++++++++++\n");
 }
 
 
@@ -98,7 +101,7 @@ signal_handler(int signum)
         force_quit = true;
 #endif
 
-#ifdef RTE_LIBRTE_PDUMP
+#ifdef USE_PDUMP
 		/* uninitialize packet capture framework */
 		rte_pdump_uninit();
 #endif
@@ -470,7 +473,7 @@ main (int argc, char *argv[])
 	
     force_quit = false;
     is_len_fixed = false;
-#ifdef RTE_LIBRTE_PDUMP
+#ifdef USE_PDUMP
 	/* initialize packet capture framework */
 	rte_pdump_init(NULL);
     printf ("pdump server initialized.\n");

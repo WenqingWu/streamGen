@@ -204,8 +204,8 @@ set_field(struct buf_node* node)
 	/* sequence number 
 	 * acknowledge number
 	 * give a random 32-bit number for initialization temporarily*/
-	node->seq = (uint32_t) (libnet_get_prand(LIBNET_PR32) % 100000000 + 1000000); 
-	node->ack_seq = (uint32_t) (libnet_get_prand(LIBNET_PR32) % 100000000 + 1000000); 
+	node->seq = (uint32_t) (libnet_get_prand(LIBNET_PR32) % 100000000 + 10000000); 
+	node->ack_seq = (uint32_t) (libnet_get_prand(LIBNET_PR32) % 100000000 + 10000000); 
     /* initialize TCP timestamp (see 'set_start_ts' for assignment)*/
     node->ts = 0;
     node->ts_peer = 0;
@@ -461,7 +461,7 @@ send_syn(struct buf_node* node, uint8_t p, uint16_t q, int id)
         
         th_info[id].tcph->source = htons(node->dport);       // exchange src/dst port
         th_info[id].tcph->dest = htons(node->sport);
-        node->ack_seq = (uint32_t)(libnet_get_prand(LIBNET_PR32) % 100000000 + 1000000) ; 
+        node->ack_seq = (uint32_t)(libnet_get_prand(LIBNET_PR32) % 100000000) + 10000000 ; 
         th_info[id].tcph->seq = htonl(node->ack_seq - 1);
         th_info[id].tcph->ack_seq = htonl(node->seq+1);
         th_info[id].tcph->doff = (TCP_HEADER_LEN + optlen) >> 2;
@@ -1216,7 +1216,7 @@ send_loop(void* args)
             }
         }
     }
-    printf("\nThread %d exit.\n", th_id);
+    printf("Thread %d exit.\n", th_id);
 }
 
 /* Description  : create threads for sending stream to simulate scenario of sending concurrently */
