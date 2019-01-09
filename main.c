@@ -34,6 +34,10 @@ static const struct rte_eth_conf port_conf_default = {
 };
 struct rte_eth_stats stats_start;
 
+#ifdef STAT_THREAD
+int stat_interval = 2;
+pthread_t 		stat_id;
+#endif
 volatile bool force_quit;
 
 #ifdef SEND_THREAD
@@ -65,13 +69,32 @@ char        error[LIBNET_ERRBUF_SIZE];
 pcap_t     *pcap_hdl;
 #endif
 
+#define S_TO_TSC(t) rte_get_tsc_hz() * (t)
+/* delay for 't' seconds */
 static void
-print_stat(void)
+time_delay(int t)
+{
+	uint64_t drain_cycle;
+	uint64_t cur_cycle, pre_cycle, diff_cycles;
+
+	pre_cycle = rte_rdtsc();
+	drain_cycle = S_TO_TSC(t);
+	while (!force_quit) {
+		cur_cycle = rte_rdtsc();
+		diff_cycles = cur_cycle - pre_cycle;
+		if (unlikely(diff_cycles >= drain_cycle)) {
+			break;
+		}
+	}
+}
+
+static void
+print_final_stat(void)
 {
 	struct rte_eth_stats stats_end;
 	rte_eth_stats_get(snd_port, &stats_end);
 
-    printf("\n+++++++++++ Statistics for streamGen +++++++++++\n");
+    printf("\n\n\n+++++ Accumulated Statistics for streamGen +++++\n");
 #ifdef USE_DPDK
 #ifdef SEND_THREAD
     int i;
@@ -108,11 +131,13 @@ static void
 signal_handler(int signum)
 {
     if (signum == SIGINT || signum == SIGTERM) {
-        printf("\n\nSignal %d received, preparing to exit...\n",
-                signum);
 
 #ifdef USE_DPDK
         force_quit = true;
+#endif
+
+#ifdef STAT_THREAD
+		pthread_join(stat_id, NULL);
 #endif
 
 #ifdef USE_PDUMP
@@ -127,12 +152,11 @@ signal_handler(int signum)
 #ifdef SEND_THREAD
         wait_threads();
 #endif
-
         /* free hash table */
         destroy_hash_buf();
         
         /* print statistics */
-        print_stat();
+        print_final_stat();
 
 		/* exit with the expected status */
 		signal(signum, SIG_DFL);
@@ -366,6 +390,58 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
 }
 #endif
 
+#ifdef STAT_THREAD
+/* loop for statistics thread */
+static void
+stat_loop(void *arg)
+{	 
+	uint64_t drain_cycle;
+	uint64_t cur_cycle, pre_cycle, diff_cycles;
+	struct rte_eth_stats stat_s, stat_e;
+	uint64_t pps_tx, bps_tx;
+
+	pre_cycle = rte_rdtsc();
+	drain_cycle = S_TO_TSC(stat_interval);
+    
+	time_delay(2);
+	rte_eth_stats_get(snd_port, &stat_s);
+
+	while (!force_quit) {
+		cur_cycle = rte_rdtsc();
+		diff_cycles = cur_cycle - pre_cycle;
+
+		if (unlikely(diff_cycles >= drain_cycle)) {
+			pre_cycle = cur_cycle;
+			
+			rte_eth_stats_get(snd_port, &stat_e);
+			
+			pps_tx = (stat_e.opackets - stat_s.opackets) * rte_get_tsc_hz() / diff_cycles;
+			bps_tx = (stat_e.obytes - stat_s.obytes) * 8 * rte_get_tsc_hz() / diff_cycles;
+			/* Clear screen and move to top left */
+			const char clr[] = { 27, '[', '2', 'J', '\0' };
+			const char topLeft[] = { 27, '[', '1', ';', '1', 'H','\0' };
+			printf("%s%s", clr, topLeft);
+		
+			printf("NIC Statistics ===================================\n");
+			printf("Accumulated Statistics from beginning ------------\n");
+			printf("  TX-packets:\t\t\t%"PRIu64"\n", stat_e.opackets - stats_start.opackets);
+			printf("  TX-bytes:\t\t\t%"PRIu64"\n", stat_e.obytes - stats_start.obytes);
+            printf("  TX-errors:\t\t\t%"PRIu64"\n", stat_e.oerrors - stats_start.oerrors);
+			printf("Throughput Since Last Display --------------------\n");
+			printf("  TX-pps:\t\t\t%"PRIu64"\n", pps_tx);
+			if (bps_tx > 1048576) 
+				printf("  TX-Mbps:\t\t\t%"PRIu64"\n", bps_tx / 1048576);
+			else
+				printf("  TX-bps:\t\t\t%"PRIu64"\n", bps_tx);
+			
+			stat_s.obytes = stat_e.obytes;
+			stat_s.opackets = stat_e.opackets;
+			printf("==================================================\n");
+		}
+	}
+}
+#endif
+
 /*
  * The lcore main. This is the main thread that does the work, reading from
  * an input port and writing to an output port.
@@ -373,6 +449,9 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
 static void
 lcore_main(void)
 {
+	pthread_attr_t  attr;
+	cpu_set_t       cpus;
+
     /* store stream data read from pcap file */
     printf("\nReading stream data from pcap file...\n");
     nids_run();
@@ -381,8 +460,34 @@ lcore_main(void)
 #ifdef SEND_THREAD
     /* send streams concurrently with multi-thread*/
     run_send_threads();
+	
+#ifdef STAT_THREAD
+	/* start statistics thread */
+	pthread_attr_init(&attr);
+	CPU_ZERO(&cpus);
+	CPU_SET( 0, &cpus);  // affinitize to CPU 0
+	pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+
+	if (pthread_create(&stat_id, &attr, stat_loop, NULL) != 0 ) {
+		printf("Failed to create statistics thread.\n");
+		exit(1);
+	}
+#endif
+	/* wait sending thread */
     wait_threads();
 #else
+#ifdef STAT_THREAD
+	/* start statistics thread */
+	pthread_attr_init(&attr);
+	CPU_ZERO(&cpus);
+	CPU_SET(2, &cpus);  // affinitize to CPU 2
+	pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+
+	if (pthread_create(&stat_id, &attr, stat_loop, NULL) != 0 ) {
+		printf("Failed to create statistics thread.\n");
+		exit(1);
+	}
+#endif
     /* send streams concurrently */
     send_streams();
 #endif
@@ -396,16 +501,19 @@ print_usage(const char * prgname)
         "\n\t[options]:\n"
         "\t-h help: display usage infomation\n"
         "\t-i PCAP FILE:\n"
-        "\t\tget input packets from file\n"
+        "\t\tInput packets which contains network trace\n"
         "\t-o INTERFACE:\n"
         "\t\tinterface for sending packets\n"
         "\t\t(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)\n"
-        "\t-c concurrency: concurrency of sending streams.(default 10)\n"
-        "\t-t sending threads:\n"
-        "\t\tnumber of sending threads (default 1, maximum 8)\n"
-        "\t-l payload length: give a fixed length of payload for packets with payload\n"
-        "\t-b tx_burst: \n"
-        "\t\ttransmiting burst while sending with DPDK (default 1, maximum 128)\n"
+        "\t-c CONCURRENCY: concurrency of sending streams.(default 10)\n"
+        "\t-t THREADS:\n"
+        "\t\tNumber of sending threads (default 1, maximum 8)\n"
+        "\t-l LENGTH of PAYLOAD: \n"
+		"\t\tGive a fixed length of payload for packets with payload\n"
+		"\t-T TIME INTERVAL: \n"
+		"\t\tTime interval for displaying statistics information.(default 2 for 2s)\n"
+        "\t-b BURST: \n"
+        "\t\tTransmiting burst while sending with DPDK (default 1, maximum 128)\n"
         "\t-m CUT MODE(Not used for now):\n"
         "\t\t1, equal mode\n"
         "\t\t2, random mode\n"
@@ -419,7 +527,7 @@ get_options(int argc, char *argv[])
 {
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "hi:o:m:b:c:l:t:")) != -1) {
+    while ((opt = getopt(argc, argv, "hi:o:m:b:c:l:t:T:")) != -1) {
         switch(opt) {
             case 'h':
                 print_usage(argv[0]);
@@ -453,6 +561,11 @@ get_options(int argc, char *argv[])
             case 't':
               	nb_snd_thread = atoi(optarg);
               	break;
+#ifdef STAT_THREAD
+            case 'T':
+              	stat_interval = atoi(optarg);
+              	break;
+#endif
             case 'l':
               	len_cut = atoi(optarg);
 				is_len_fixed = true;
@@ -554,11 +667,15 @@ main (int argc, char *argv[])
 	}
 	
 	rte_eth_stats_get(snd_port, &stats_start);
+
 	nids_register_tcp (tcp_callback);
     lcore_main(); 
 	
 #ifdef SEND_THREAD
     destroy_threads();
+#endif
+#ifdef STAT_THREAD
+	pthread_cancel(stat_id);
 #endif
 #ifdef USE_DPDK
 	/* sent out or drop rest data remains in hash table,
@@ -566,7 +683,7 @@ main (int argc, char *argv[])
 	 * */
     dpdk_tx_flush();
 #endif
-    print_stat();
+    print_final_stat();
 
 outdoor:
     printf("finishing ...\n");
