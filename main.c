@@ -392,7 +392,7 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
 
 #ifdef STAT_THREAD
 /* loop for statistics thread */
-static void
+void *
 stat_loop(void *arg)
 {	 
 	uint64_t drain_cycle;
@@ -400,10 +400,10 @@ stat_loop(void *arg)
 	struct rte_eth_stats stat_s, stat_e;
 	uint64_t pps_tx, bps_tx;
 
-	pre_cycle = rte_rdtsc();
 	drain_cycle = S_TO_TSC(stat_interval);
     
 	time_delay(2);
+	pre_cycle = rte_rdtsc();
 	rte_eth_stats_get(snd_port, &stat_s);
 
 	while (!force_quit) {
