@@ -514,15 +514,21 @@ get_options(int argc, char *argv[])
             case 'b':
               	burst = (uint16_t)atoi(optarg);
                 if (burst >= MAX_BURST) {
-                    printf("Burst number exceed MAX_BURST(128).\n");
-                    exit(1);
+                    rte_exit(EXIT_FAILURE, "Burst number exceeds MAX_BURST(%d).\n", MAX_BURST);
                 }
               	break;
             case 'm':
               	cmode = atoi(optarg);
+                if (cmode > 3) {
+                    printf("Invalid segmentation method.(only 3 method supported for now.)\n");
+					exit(1);
+                }
               	break;
             case 't':
               	nb_snd_thread = atoi(optarg);
+				if (nb_snd_thread > NUM_SEND_THREAD) {
+					rte_exit(EXIT_FAILURE, "Number of thread is too large.(Maximum %d)\n", NUM_SEND_THREAD);
+				}
               	break;
 #ifdef STAT_THREAD
             case 'T':
@@ -532,6 +538,9 @@ get_options(int argc, char *argv[])
             case 'l':
               	len_cut = atoi(optarg);
 				is_len_fixed = true;
+				if (len_cut > MAX_SEG_SIZE) {
+					printf("Warning, length of payload exceeds maximum segment size, will be replaced by MSS.\n");
+				}
               	break;
 	        default:
 				print_usage(argv[0]);	
@@ -592,9 +601,11 @@ main (int argc, char *argv[])
     
     /* number of ports */
 	nb_ports = rte_eth_dev_count();
-    printf("nb_port:%d\n", nb_ports);
+    printf("Number of Network Ports Available:%d\n", nb_ports);
 	if (nb_ports <= 0) {
 		rte_exit(EXIT_FAILURE, "Error: no ports available\n");
+	} else if (snd_port >= nb_ports){
+		rte_exit(EXIT_FAILURE, "Error: Specified port %d is invalid.\n", snd_port);
 	}
 
     printf("NUMA info, socket id: %d, port 0 socket id: %d\n", rte_socket_id(), rte_eth_dev_socket_id(0));
