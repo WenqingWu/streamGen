@@ -361,7 +361,7 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
 
 #ifdef STAT_THREAD
 /* loop for statistics thread */
-static void *
+void *
 stat_loop(void *arg)
 {	 
 	uint64_t drain_cycle;
