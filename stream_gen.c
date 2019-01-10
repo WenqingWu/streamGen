@@ -176,6 +176,10 @@ set_field(struct buf_node* node)
     uint8_t adr_3 = (uint8_t) libnet_get_prand(LIBNET_PR8); /*  0~255 */
 	uint8_t adr_4 = (uint8_t) libnet_get_prand(LIBNET_PR8); /*  0~255 */
 
+    if (adr_3 == adr_4) {
+        adr_4 = (adr_4 + 11) % 254; 
+    } 
+
 	sprintf(src_ip_addr, "10.0.%u.%u", adr_3, adr_4);	
 	sprintf(dst_ip_addr, "10.0.%u.%u", adr_4, adr_3);	
 	
@@ -187,6 +191,10 @@ set_field(struct buf_node* node)
 
 	node->dport = (uint16_t) libnet_get_prand(LIBNET_PRu16);
 	if (node->dport <= 1024) node->dport += 1024;
+
+    if (node->sport == node->dport) {
+        node->dport = (node->dport + 123) % 65530;
+    } 
 
 	node->id = (uint16_t) (libnet_get_prand(LIBNET_PR16) % 32768);
     node->rcv_id = 0;
