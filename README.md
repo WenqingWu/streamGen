@@ -37,6 +37,7 @@ $ export RTE_TARGET=x86_64-native-linuxapp-gcc
 $ cd <path-to-streamGen>
 $ cd libnids-1.24/
 $ make
+$ make install
 $ cd ..
 $ make
 ```
