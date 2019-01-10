@@ -18,7 +18,6 @@ See the file COPYING for license details.
 
 #include "include/stream_gen.h"
 
-#ifdef USE_DPDK
 #include <inttypes.h>
 #include <rte_eal.h>
 #include <rte_cycles.h>
@@ -50,7 +49,6 @@ int                             snd_port = 0;
 uint16_t                        burst = DEFAULT_BURST_SIZE;           // tx burst, default 64
 struct rte_mempool*             mp;
 struct rte_eth_dev_tx_buffer*   tx_buffer;
-#endif //USE_DPDK
 
 #define int_ntoa(x)	inet_ntoa(*((struct in_addr *)&x))
 
@@ -63,11 +61,6 @@ int         nb_snd_thread = 2;
 int         cmode = 1;
 int         len_cut = 5;
 bool 		is_len_fixed = false;
-#ifdef USE_PCAP
-char        dev[20] = "eth0";    // network interface for sending packets
-char        error[LIBNET_ERRBUF_SIZE];
-pcap_t     *pcap_hdl;
-#endif
 
 #define S_TO_TSC(t) rte_get_tsc_hz() * (t)
 /* delay for 't' seconds */
@@ -95,7 +88,6 @@ print_final_stat(void)
 	rte_eth_stats_get(snd_port, &stats_end);
 
     printf("\n\n\n+++++ Accumulated Statistics for streamGen +++++\n");
-#ifdef USE_DPDK
 #ifdef SEND_THREAD
     int i;
     uint64_t tx_total = 0, drop_total = 0;
@@ -120,9 +112,6 @@ print_final_stat(void)
     printf("  TX-bytes:\t\t\t%"PRIu64"\n", stats_end.obytes - stats_start.obytes);
     printf("  TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
 #endif
-#else
-    printf("  TX-packets:\t\t\t%"PRIu64"\n", snd_cnt);
-#endif
     printf("++++++++++++++++++++++++++++++++++++++++++++++++\n");
 }
 
@@ -132,9 +121,7 @@ signal_handler(int signum)
 {
     if (signum == SIGINT || signum == SIGTERM) {
 
-#ifdef USE_DPDK
         force_quit = true;
-#endif
 
 #ifdef STAT_THREAD
 		pthread_join(stat_id, NULL);
@@ -143,10 +130,6 @@ signal_handler(int signum)
 #ifdef USE_PDUMP
 		/* uninitialize packet capture framework */
 		rte_pdump_uninit();
-#endif
-
-#ifdef USE_PCAP
-        pcap_close(pcap_hdl);
 #endif
 
 #ifdef SEND_THREAD
@@ -205,16 +188,10 @@ tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)
 		/* if we don't increase this value, we won't be notified of urgent data arrival */
 		a_tcp->client.collect_urg++; 
 #endif
-#ifdef DEBUG_SEGMENTOR
-		fprintf (stderr, "%s established\n", buf);
-#endif
 		return;
 	}
 	if (a_tcp->nids_state == NIDS_CLOSE) {
 		/* connection has been closed normally */
-#ifdef DEBUG_SEGMENTOR
-		fprintf (stderr, "%s closing\n", buf);
-#endif
 		/* TODO, determine in what direction (dual direction for now!!)*/
 		/* same direction  */
 		tp4 = a_tcp->addr;
@@ -230,9 +207,6 @@ tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)
 	}
 	if (a_tcp->nids_state == NIDS_RESET) {
 		/* connection has been closed by RST */
-#ifdef DEBUG_SEGMENTOR
-		fprintf (stderr, "%s reset\n", buf);
-#endif
 		return;
 	}
 
@@ -292,9 +266,6 @@ tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)
 		/* we print the connection parameters:
 		 * (saddr, daddr, sport, dport) accompanied by data flow direction (-> or <-)
 		 */
-#ifdef DEBUG_SEGMENTOR
-		fprintf(stderr,"%s",buf); 
-#endif
 		/* segment data buffer */
 		store_stream_data(tp4, (char *)hlf->data, hlf->count - hlf->offset, NIDS_DATA);	
 #ifdef DEBUG_SEGMENTOR	
@@ -304,7 +275,6 @@ tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)
 	return ;
 }
 
-#ifdef USE_DPDK
 /*
  * Initializes a given port using global settings and with the RX buffers
  * coming from the mbuf_pool passed as a parameter.
@@ -388,11 +358,10 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
 
     return 0;
 }
-#endif
 
 #ifdef STAT_THREAD
 /* loop for statistics thread */
-void *
+static void *
 stat_loop(void *arg)
 {	 
 	uint64_t drain_cycle;
@@ -504,7 +473,7 @@ print_usage(const char * prgname)
         "\t\tInput packets which contains network trace\n"
         "\t-o INTERFACE:\n"
         "\t\tinterface for sending packets\n"
-        "\t\t(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)\n"
+        "\t\t(e.g. 1 for port1 with DPDK, default 0)\n"
         "\t-c CONCURRENCY: concurrency of sending streams.(default 10)\n"
         "\t-t THREADS:\n"
         "\t\tNumber of sending threads (default 1, maximum 8)\n"
@@ -537,23 +506,17 @@ get_options(int argc, char *argv[])
                 strcpy(nids_params.filename, optarg);
                 break;
             case 'o':
-#ifdef USE_PCAP
-              	strcpy(dev, (const char *)optarg);
-#else
                 snd_port = atoi(optarg);
-#endif
               	break;
             case 'c':
               	nb_concur = atoi(optarg);
               	break;
             case 'b':
-#ifdef USE_DPDK
               	burst = (uint16_t)atoi(optarg);
                 if (burst >= MAX_BURST) {
                     printf("Burst number exceed MAX_BURST(128).\n");
                     exit(1);
                 }
-#endif
               	break;
             case 'm':
               	cmode = atoi(optarg);
@@ -585,7 +548,6 @@ main (int argc, char *argv[])
 {
     int ret;
     int i;
-#ifdef USE_DPDK
     //struct rte_mempool *mbuf_pool;
     unsigned nb_ports;
     //uint16_t portid;
@@ -605,8 +567,7 @@ main (int argc, char *argv[])
 	rte_pdump_init(NULL);
     printf ("pdump server initialized.\n");
 #endif
-
-#endif
+	
 	signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
@@ -629,7 +590,6 @@ main (int argc, char *argv[])
     snd_cnt = 0;
     nb_stream = 0;
     
-#ifdef USE_DPDK
     /* number of ports */
 	nb_ports = rte_eth_dev_count();
     printf("nb_port:%d\n", nb_ports);
@@ -647,19 +607,6 @@ main (int argc, char *argv[])
     /* Initialize all ports. */
     if (port_init(snd_port, mp) != 0)
         rte_exit(EXIT_FAILURE, "Cannot init port 0\n");
-#endif //USE_DPDK
-
-#ifdef USE_PCAP
-    /* Open the adapter */
-    if ((pcap_hdl = pcap_open_live(dev,   /* name of the interface(device) */
-                    65535,                          /* portion of the packet to capture */
-                    1,                              /* promiscuous mode (nonzero means promiscuous) */
-                    1000,                           /* read timeout */
-                    error)) == NULL) {
-        fprintf(stderr, "Could not open %s, error: %s\n", dev, error);
-        exit(1);
-    }
-#endif
 
 	if (!nids_init ()) {
 		fprintf(stderr,"error, %s\n",nids_errbuf);
@@ -677,20 +624,16 @@ main (int argc, char *argv[])
 #ifdef STAT_THREAD
 	pthread_cancel(stat_id);
 #endif
-#ifdef USE_DPDK
 	/* sent out or drop rest data remains in hash table,
 	 * and free hash table 
 	 * */
     dpdk_tx_flush();
-#endif
     print_final_stat();
 
 outdoor:
     printf("finishing ...\n");
 	destroy_hash_buf();
-#ifdef USE_PCAP
-	pcap_close(pcap_hdl);
-#endif
+	
 	return 0;
 }
 

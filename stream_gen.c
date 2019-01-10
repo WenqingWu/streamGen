@@ -29,7 +29,6 @@ uint8_t src_mac[6] = {0x90, 0xe2, 0xba, 0x13, 0x08, 0xb0}; //b0
 uint8_t dst_mac[6] = {0x90, 0xe2, 0xba, 0x16, 0x1a, 0xb1}; //b1
 
 
-#ifdef USE_DPDK
 #define US_TO_TSC(t) ((rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S ) * (t)
 /* *
  * Description  : error callback for "rte_eth_tx_buffer()"
@@ -91,6 +90,7 @@ dpdk_send_burst(uint8_t p, uint16_t q)
     nb_tx = rte_eth_tx_burst(p, q, tx_mbufs.m_table, cnt);  //tx_rings = 1, main.c
 
     /* retry while sending failed */
+#if 1
     if (unlikely (nb_tx < cnt)) {
         retry = PKT_RETRY_COUNT;
         while (nb_tx < cnt && (retry--)) {
@@ -98,6 +98,7 @@ dpdk_send_burst(uint8_t p, uint16_t q)
             nb_tx += rte_eth_tx_burst(p, q, &tx_mbufs.m_table[nb_tx], cnt - nb_tx);
         }
     }
+#endif
     port_stat.tx += nb_tx;
     /* free unsent packets */
     if (unlikely (nb_tx < cnt)) {
@@ -149,7 +150,7 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q)
     /* transmit while reaching tx_burst */
     if (tx_mbufs.len >= burst) {
         /* sending interval (burst = 1) */
-        burst_delay(10);        
+        //burst_delay(1);        
         dpdk_send_burst(p, q);
         /* update size of tx_mbufs */
         tx_mbufs.len = 0;
@@ -165,8 +166,6 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q)
 
     return 1;  
 }
-
-#endif
 
 /* Description 	: setting common fields for the same stream
  *              4-tuple, identifier, seq, ack
@@ -422,14 +421,7 @@ send_syn(struct buf_node* node, uint8_t p, uint16_t q)
         tcph->ack = 0;
         tcph->check = tcp_checksum((struct iphdr*)iph, (struct tcphdr*)tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)pkt, HEADER_LEN + optlen) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(1);
-#else // DPDK
         dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen, p, q);
-#endif 
         node->state = TCP_ST_SYN_SENT;
     } else if(node->state == TCP_ST_SYN_SENT) {
         /* syn / ack   ' <- '*/
@@ -462,14 +454,7 @@ send_syn(struct buf_node* node, uint8_t p, uint16_t q)
         tcph->ack = 1;           // ACK
         tcph->check = tcp_checksum((struct iphdr*)iph, (struct tcphdr*)tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)pkt, HEADER_LEN + optlen) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(1);
-#else // DPDK
-        dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen, p, q);
-#endif
+		dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen, p, q);
         node->state = TCP_ST_SYN_RCVD;
     } else if(node->state == TCP_ST_SYN_RCVD) {
         /* ACK    '->' */
@@ -503,16 +488,9 @@ send_syn(struct buf_node* node, uint8_t p, uint16_t q)
         tcph->ack = 1;           // ACK
         tcph->check = tcp_checksum((struct iphdr*)iph, (struct tcphdr*)tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)pkt, HEADER_LEN + optlen) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(1);
-        snd_cnt += 3;
-#else // DPDK
         dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen, p, q);
-#endif
-        tcph->psh = 1;
+        
+		tcph->psh = 1;
         node->id++;
         node->state =  TCP_ST_ESTABLISHED; 
     } else {
@@ -561,14 +539,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q)
         tcph->ack = 1;
         tcph->check = tcp_checksum((struct iphdr*)iph, (struct tcphdr*)tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)pkt, HEADER_LEN + optlen ) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(1);
-#else // DPDK
         dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen, p, q);
-#endif
         node->state = TCP_ST_FIN_SENT_1; 
     } else if (node->state == TCP_ST_FIN_SENT_1){
         /* fin, ack   ' <- '*/
@@ -600,14 +571,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q)
         tcph->ack = 1;           // ACK
         tcph->check = tcp_checksum((struct iphdr*)iph, (struct tcphdr*)tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)pkt, HEADER_LEN + optlen) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(5);
-#else // DPDK
         dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen, p, q);
-#endif
         node->state = TCP_ST_FIN_SENT_2;    
     } else if(node->state == TCP_ST_FIN_SENT_2) {
         /* ACK    '->' */
@@ -640,16 +604,9 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q)
         tcph->ack = 1;           // ACK
         tcph->check = tcp_checksum((struct iphdr*)iph, (struct tcphdr*)tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)pkt, HEADER_LEN + optlen) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(1);
-        snd_cnt += 3;
-#else // DPDK
         dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen, p, q);
-#endif
-        node->state = TCP_ST_CLOSED;
+        
+		node->state = TCP_ST_CLOSED;
         /* reset header fields */
         node->offset = 0;
         set_field(node);
@@ -818,15 +775,7 @@ send_ack(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q)
     tcph->psh = 0;
 	tcph->check = tcp_checksum((struct iphdr*)iph, (struct tcphdr*)tcph);	
 
-#ifdef USE_PCAP
-    if (pcap_sendpacket(pcap_hdl, (const unsigned char*)pkt, (HEADER_LEN + optlen)) != 0) {   
-        fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-    }
-	usleep(1);
-    snd_cnt++;
-#else // DPDK
     dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen, p, q);
-#endif
 }
 
 /* Description  : encapsulate data with headers, and send crafted packets out 
@@ -880,16 +829,9 @@ send_data_pkt(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q)
     node->id++;
     node->seq += length;
 
-#ifdef USE_PCAP
-    if (pcap_sendpacket(pcap_hdl, (const unsigned char*)pkt, (HEADER_LEN + optlen + length)) != 0) {
-        fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-    }
-	usleep(1);
-    snd_cnt++;
-#else // DPDK
     dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen + length, p, q);
-#endif
-    send_ack(node, length, p, q);
+    /* send correspond ACK */
+	send_ack(node, length, p, q);
 }
 
 /* Description: cache total data of streams, where data for the same stream will be stored in the same buffer
@@ -1028,7 +970,6 @@ copy_stream_data(int nb_copy)
     int cnt;
     /* TODO: may modify nids_params.n_tcp_streams later*/
     int size = nids_params.n_tcp_streams;
-#ifdef USE_DPDK
     cnt = 0;
     while (!force_quit) {
         for (i = size - 1; i > 0; i--) {
@@ -1050,7 +991,6 @@ copy_stream_data(int nb_copy)
             }
         }
     }
-#endif
 }
 
 static int
@@ -1100,7 +1040,6 @@ send_streams(void)
     /* initialize packet header (ethernet header; IP header; TCP header)*/
 	prepare_header();
 
-#ifdef USE_DPDK
     n_part = 30;
     while(!force_quit) {
         cnt = 0;
@@ -1135,7 +1074,6 @@ send_streams(void)
                 break;
         }
     }
-#endif
 }
 
 

@@ -24,7 +24,6 @@ uint8_t src_mac[6] = {0x90, 0xe2, 0xba, 0x13, 0x08, 0xb0}; //b0
 uint8_t dst_mac[6] = {0x90, 0xe2, 0xba, 0x16, 0x1a, 0xb1}; //b1
 
 
-#ifdef USE_DPDK
 #define US_TO_TSC(t) ((rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S ) * (t)
 #ifdef TX_BUFFER
 /* *
@@ -174,8 +173,6 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q, int id)
 
     return 1;  
 }
-
-#endif
 
 /* Description 	: setting common fields for the same stream
  *              4-tuple, identifier, seq, ack
@@ -431,14 +428,7 @@ send_syn(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 0;
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)th_info[id].pkt, HEADER_LEN + optlen) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(1);
-#else // DPDK
         dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
-#endif 
         node->state = TCP_ST_SYN_SENT;
     } else if(node->state == TCP_ST_SYN_SENT) {
         /* syn / ack   ' <- '*/
@@ -471,14 +461,7 @@ send_syn(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 1;           // ACK
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)th_info[id].pkt, HEADER_LEN + optlen) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(1);
-#else // DPDK
         dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
-#endif
         node->state = TCP_ST_SYN_RCVD;
     } else if(node->state == TCP_ST_SYN_RCVD) {
         /* ACK    '->' */
@@ -512,15 +495,8 @@ send_syn(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 1;           // ACK
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)th_info[id].pkt, HEADER_LEN + optlen) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(1);
-        snd_cnt += 3;
-#else // DPDK
         dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
-#endif
+
         th_info[id].tcph->psh = 1;
         node->id++;
         node->state =  TCP_ST_ESTABLISHED; 
@@ -570,14 +546,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 1;
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)th_info[id].pkt, HEADER_LEN + optlen ) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(1);
-#else // DPDK
         dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
-#endif
         node->state = TCP_ST_FIN_SENT_1; 
     } else if (node->state == TCP_ST_FIN_SENT_1){
         /* fin, ack   ' <- '*/
@@ -609,14 +578,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 1;           // ACK
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)th_info[id].pkt, HEADER_LEN + optlen) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(5);
-#else // DPDK
         dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
-#endif
         node->state = TCP_ST_FIN_SENT_2;    
     } else if(node->state == TCP_ST_FIN_SENT_2) {
         /* ACK    '->' */
@@ -649,16 +611,9 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 1;           // ACK
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-#ifdef USE_PCAP
-        if (pcap_sendpacket(pcap_hdl, (const unsigned char*)th_info[id].pkt, HEADER_LEN + optlen) != 0) {
-            fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-        }
-        usleep(1);
-        snd_cnt += 3;
-#else // DPDK
         dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
-#endif
-        node->state = TCP_ST_CLOSED;
+        
+		node->state = TCP_ST_CLOSED;
         /* reset header fields */
         node->offset = 0;
         set_field(node);
@@ -819,15 +774,7 @@ send_ack(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q, int id)
     th_info[id].tcph->psh = 0;
 	th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-#ifdef USE_PCAP
-    if (pcap_sendpacket(pcap_hdl, (const unsigned char*)th_info[id].pkt, (HEADER_LEN + optlen)) != 0) {
-        fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-    }
-	usleep(1);
-    snd_cnt++;
-#else // DPDK
     dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
-#endif
 }
 
 /* Description  : encapsulate data with headers, and send crafted packets out 
@@ -881,16 +828,9 @@ send_data_pkt(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q, int
     node->id++;
     node->seq += length;
 
-#ifdef USE_PCAP
-    if (pcap_sendpacket(pcap_hdl, (const unsigned char*)th_info[id].pkt, (HEADER_LEN + optlen + length)) != 0) {
-        fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
-    }
-	usleep(1);
-    snd_cnt++;
-#else // DPDK
     dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen + length, p, q, id);
-#endif
-    send_ack(node, length, p, q, id);
+    /* send correspond ACK */
+	send_ack(node, length, p, q, id);
 }
 
 /* Description: cache total data of streams, where data for the same stream will be stored in the same buffer

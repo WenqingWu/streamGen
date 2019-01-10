@@ -15,10 +15,7 @@
 #include "list.h"
 #include "checksum.h"
 
-#define USE_DPDK
-
 /* DPDK */
-#ifdef USE_DPDK
 #include <stdint.h>
 #include <inttypes.h>
 #include <rte_ethdev.h>
@@ -37,7 +34,6 @@
 #define NUM_MBUFS 			1024
 #define MBUF_CACHE_SIZE 	256
 #define MAX_MBUF_PER_THREAD 1024
-#endif
 
 #define TCP_OPT_TIMESTAMP_ENABLED   1	/* enabled for rtt measure */
 #define TCP_OPT_SACK_ENABLED        0	/* not implemented */
@@ -54,8 +50,6 @@
 #define	EQUAL_DIVIDE        1  	 	// divide buffer into several equal part
 #define	RANDOM_DIVIDE		2		// divide buffer into fragments with random length
 #define	OVERLAP_DIVIDE      3		// divide buffer into fragments which may overlap with other ones
-
-// #define SEND_THREAD
 
 /* total data of a stream is store in a buf_node struct */
 struct buf_node {
@@ -92,14 +86,7 @@ extern int      len_cut;
 extern bool     is_len_fixed;
 extern uint64_t snd_cnt;
 
-#ifdef USE_PCAP
-extern char     dev[20];  
-extern char     error[LIBNET_ERRBUF_SIZE];
-extern pcap_t*  pcap_hdl;
-#endif
 
-
-#ifdef USE_DPDK
 struct mbuf_table {
 	uint16_t len;                           // number of rte_mbuf 
 	struct rte_mbuf *m_table[MAX_BURST];    //mbuf table of packets to send
@@ -148,7 +135,6 @@ extern struct   dpdk_port_statistics    port_stat;
 
 void prepare_header(void);
 #endif //SEND_THREAD
-#endif //USE_DPDK
 
 void init_hash_buf(void);
 void destroy_hash_buf(void);
