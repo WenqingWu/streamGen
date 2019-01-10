@@ -48,22 +48,20 @@ You may run "./build/app/streamGen-dpdk -c 0x1 -n 1 -- -h" for help information.
 To start streamGen, you need to give a pcap file as input, for example,
 
 ```bash
-$ ./build/app/streamGen-dpdk -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 100 -t 4
-```
+$ ./build/app/streamGen-dpdk -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000```
 
 ```bash
 -i pcap file	: Input file which provides network trace.
 -o interface	: Interface used to send packets.
 		(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)
 -c concurrency	: Concurrency when sending streams.(default 10)  
--t thread	: Number of sending threads (default 1, maximum 8) 
 ```
 
-### To run with Single-thread
+### To run with Multiple thread
 
 ```bash
-1. Comment macro "SEND_THREAD" in include/stream_gen.h
-2. Comment "MODE := multi-thread" in Makefile
+1. Uncomment "LIBS_CFLAGS += -DSEND_THREAD" in Makefile
+2. Uncomment "MODE := multi-thread" in Makefile
 3. Rebuild project
 ```
 
