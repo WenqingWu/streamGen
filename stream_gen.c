@@ -181,7 +181,7 @@ set_field(struct buf_node* node)
     } 
 
 	sprintf(src_ip_addr, "10.0.%u.%u", adr_3, adr_4);	
-	sprintf(dst_ip_addr, "10.0.%u.%u", adr_4, adr_3);	
+	sprintf(dst_ip_addr, "10.1.%u.%u", adr_4, adr_3);	
 	
     node->saddr = inet_addr(src_ip_addr);
     node->daddr = inet_addr(dst_ip_addr);
