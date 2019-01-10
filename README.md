@@ -48,7 +48,8 @@ You may run "./build/app/streamGen-dpdk -c 0x1 -n 1 -- -h" for help information.
 To start streamGen, you need to give a pcap file as input, for example,
 
 ```bash
-$ ./build/app/streamGen-dpdk -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000```
+$ ./build/app/streamGen-dpdk -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000
+```
 
 ```bash
 -i pcap file	: Input file which provides network trace.
