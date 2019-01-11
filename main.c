@@ -514,20 +514,20 @@ get_options(int argc, char *argv[])
             case 'b':
               	burst = (uint16_t)atoi(optarg);
                 if (burst >= MAX_BURST) {
-                    rte_exit(EXIT_FAILURE, "Burst number exceeds MAX_BURST(%d).\n", MAX_BURST);
+                    rte_exit(EXIT_FAILURE, "\nBurst exceeds maximum of burst(%d).\n", MAX_BURST);
                 }
               	break;
             case 'm':
               	cmode = atoi(optarg);
                 if (cmode > 3) {
-                    printf("Invalid segmentation method.(only 3 method supported for now.)\n");
+                    printf("\nInvalid segmentation method.(Only 3 methods supported for now.)\n");
 					exit(1);
                 }
               	break;
             case 't':
               	nb_snd_thread = atoi(optarg);
 				if (nb_snd_thread > NUM_SEND_THREAD) {
-					rte_exit(EXIT_FAILURE, "Number of thread is too large.(Maximum %d)\n", NUM_SEND_THREAD);
+					rte_exit(EXIT_FAILURE, "\nNumber of thread is too large.(Maximum %d)\n", NUM_SEND_THREAD);
 				}
               	break;
 #ifdef STAT_THREAD
@@ -539,7 +539,7 @@ get_options(int argc, char *argv[])
               	len_cut = atoi(optarg);
 				is_len_fixed = true;
 				if (len_cut > MAX_SEG_SIZE) {
-					printf("Warning, length of payload exceeds maximum segment size, will be replaced by MSS.\n");
+					printf("\nWarning, length of payload exceeds maximum segment size, will be replaced by MSS.\n");
 				}
               	break;
 	        default:
@@ -563,7 +563,7 @@ main (int argc, char *argv[])
 
 	ret = rte_eal_init(argc, argv);
 	if (ret < 0) {
-		rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
+		rte_exit(EXIT_FAILURE, "\nError with EAL initialization\n");
 	}
 
     argc -= ret;
@@ -584,14 +584,14 @@ main (int argc, char *argv[])
 	 * nids_params.n_hosts=256;
 	 */
 	if(argc < 3) {
-		fprintf(stderr, "start failed, too few arguments for commandline. \n\n");
+		fprintf(stderr, "\nStart-up failed, too few arguments for commandline. \n\n");
 		print_usage(argv[0]);
 		exit(1);
 	}
 	
 	ret = get_options(argc, argv);
 	if (ret < 0 ) {
-		fprintf(stderr, "get options failed,Invalid arguments.\n");
+		fprintf(stderr, "\nFailed to parse options, Invalid arguments.\n");
         exit(1);
 	}
 
@@ -601,23 +601,23 @@ main (int argc, char *argv[])
     
     /* number of ports */
 	nb_ports = rte_eth_dev_count();
-    printf("Number of Network Ports Available:%d\n", nb_ports);
+    printf("\nNumber of Network Ports Available:%d\n", nb_ports);
 	if (nb_ports <= 0) {
 		rte_exit(EXIT_FAILURE, "Error: no ports available\n");
 	} else if (snd_port >= nb_ports){
 		rte_exit(EXIT_FAILURE, "Error: Specified port %d is invalid.\n", snd_port);
 	}
 
-    printf("NUMA info, socket id: %d, port 0 socket id: %d\n", rte_socket_id(), rte_eth_dev_socket_id(0));
+    printf("NUMA info, socket id: %d, socket id for network device: %d\n", rte_socket_id(), rte_eth_dev_socket_id(0));
 	/* Creates a new mempool in memory to hold the mbufs. */
     mp = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS * nb_ports,
         MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
     if (mp == NULL)
-        rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
+        rte_exit(EXIT_FAILURE, "\nCannot create mbuf pool\n");
 
     /* Initialize all ports. */
     if (port_init(snd_port, mp) != 0)
-        rte_exit(EXIT_FAILURE, "Cannot init port 0\n");
+        rte_exit(EXIT_FAILURE, "\nCannot init port 0\n");
 
 	if (!nids_init ()) {
 		fprintf(stderr,"error, %s\n",nids_errbuf);

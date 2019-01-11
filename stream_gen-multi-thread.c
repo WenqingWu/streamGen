@@ -183,13 +183,13 @@ set_field(struct buf_node* node)
     uint8_t adr_3 = (uint8_t) libnet_get_prand(LIBNET_PR8); /*  0~255 */
 	uint8_t adr_4 = (uint8_t) libnet_get_prand(LIBNET_PR8); /*  0~255 */
 
-	if (adr_3 == adr_4) {
+    if (adr_3 == adr_4) {
         adr_4 = (adr_4 + 11) % 254; 
-    }   
+    }    
 
 	sprintf(src_ip_addr, "10.0.%u.%u", adr_3, adr_4);	
 	sprintf(dst_ip_addr, "10.1.%u.%u", adr_4, adr_3);	
-	
+
     node->saddr = inet_addr(src_ip_addr);
     node->daddr = inet_addr(dst_ip_addr);
 
@@ -787,7 +787,7 @@ send_ack(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q, int id)
 
 /* Description  : encapsulate data with headers, and send crafted packets out 
  * @ node       : buf_node which contains data to send
- * @ offset     : offset of the sending date
+ * @ offset     : offset of the sending data
  * @ size       : length of data to send
  * @ p          : network interface
  * @ q          : sending queue of interface
@@ -937,23 +937,6 @@ send_packet(struct buf_node *node, int n, uint8_t p, uint16_t q, int id)
 {
     uint32_t length;
 
-    /* TODO: give a appropriate data length randomly*/
-    if (is_len_fixed) {
-#if 0
-		if (node->len < len_cut) {
-			return;
-		}
-#endif
-		length = len_cut;
-	} else {
-		length = node->len / n;
-	}
-	
-    if (length < 5) {
-        length = node->len;
-    } else if (length > MAX_SEG_SIZE) {
-        length = MAX_SEG_SIZE;
-    }
     /* sending packet according to TCP state */
     if(node->state == TCP_ST_CLOSED) {
         if (node->offset == 0) {
@@ -964,6 +947,18 @@ send_packet(struct buf_node *node, int n, uint8_t p, uint16_t q, int id)
     } else if (node->state == TCP_ST_SYN_SENT || node->state == TCP_ST_SYN_RCVD) {
         send_syn(node, p, q, id);
     } else if (node->state == TCP_ST_ESTABLISHED) {
+		/* TODO: give a appropriate data length randomly*/
+		if (is_len_fixed) {
+			length = len_cut;
+		} else {
+			length = node->len / n;
+		}
+		
+		if (length < 5) {
+			length = node->len;
+		} else if (length > MAX_SEG_SIZE) {
+			length = MAX_SEG_SIZE;
+		}
         send_data_pkt(node, length, p, q, id);
     } else if (node->state == TCP_ST_CLOSING || node->state == TCP_ST_FIN_SENT_1 
                                              || node->state == TCP_ST_FIN_SENT_2) {
@@ -1151,6 +1146,10 @@ send_loop(void* args)
 
         /* Sending 'concur_per_thread' packets */
         for (i = th_id ; i < nb_stream; i+= nb_snd_thread) {
+            /* skip packets with small payload */
+            if (is_len_fixed && th_info[th_id].nodes[i]->len < len_cut){
+                continue;
+            }
             /* Keep sending several packets of a stream */
             n_snd = rand() % 3 + 1;         // 1 ~ 3
             while (n_snd--) {

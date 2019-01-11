@@ -178,7 +178,7 @@ set_field(struct buf_node* node)
 
     if (adr_3 == adr_4) {
         adr_4 = (adr_4 + 11) % 254; 
-    } 
+    }   
 
 	sprintf(src_ip_addr, "10.0.%u.%u", adr_3, adr_4);	
 	sprintf(dst_ip_addr, "10.1.%u.%u", adr_4, adr_3);	
@@ -788,7 +788,7 @@ send_ack(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q)
 
 /* Description  : encapsulate data with headers, and send crafted packets out 
  * @ node       : buf_node which contains data to send
- * @ offset     : offset of the sending date
+ * @ offset     : offset of the sending data
  * @ size       : length of data to send
  * @ p          : network interface
  * @ q          : sending queue of interface
@@ -936,22 +936,6 @@ send_packet(struct buf_node *node, int n, uint8_t p, uint16_t q)
 {
     uint32_t length;
 
-    /* TODO: give a appropriate data length randomly*/
-    if (is_len_fixed) {
-#if 0
-		if (node->len < len_cut) {
-			return;
-		}
-#endif
-		length = len_cut;
-	} else {
-		length = node->len / n;
-	}
-    if (length < 5) {
-        length = node->len;
-    } else if (length > MAX_SEG_SIZE) {
-        length = MAX_SEG_SIZE;
-    }
     /* sending packet according to TCP state */
     if(node->state == TCP_ST_CLOSED) {
         if (node->offset == 0) {
@@ -962,6 +946,17 @@ send_packet(struct buf_node *node, int n, uint8_t p, uint16_t q)
     } else if (node->state == TCP_ST_SYN_SENT || node->state == TCP_ST_SYN_RCVD) {
         send_syn(node, p, q);
     } else if (node->state == TCP_ST_ESTABLISHED) {
+		/* TODO: give a appropriate data length randomly*/
+		if (is_len_fixed) {
+			length = len_cut;
+		} else {
+			length = node->len / n;
+		}
+		if (length < 5) {
+			length = node->len;
+		} else if (length > MAX_SEG_SIZE) {
+			length = MAX_SEG_SIZE;
+		}
         send_data_pkt(node, length, p, q);
     } else if (node->state == TCP_ST_CLOSING || node->state == TCP_ST_FIN_SENT_1 
                                              || node->state == TCP_ST_FIN_SENT_2) {
@@ -1059,10 +1054,13 @@ send_streams(void)
             struct buf_node *buf_entry, *q;
             list_for_each_entry_safe(buf_entry, q, head, list) {
                 if (buf_entry->len) {
+                    /* skip packets with small payload*/
+                    if (is_len_fixed && buf_entry->len < len_cut) {
+                        continue;
+                    }
                     /* Keep sending several packets of a stream */
                     n_snd = rand() % 3 + 1;         // 1 ~ 3
                     while (n_snd--) {
-                        /* TODO: modify delivered queue number for multi-threading mode */
                         if (buf_entry->state == TCP_ST_FIN_SENT_2) {
                             send_packet(buf_entry, n_part, snd_port, 0);
                             break;
