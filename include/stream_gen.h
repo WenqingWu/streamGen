@@ -78,15 +78,6 @@ struct hash_table {
 };
 extern struct hash_table hash_buf;      // hash table used to retrieve buf_node 
 
-extern int      nb_concur;  // concurrency
-extern int      nb_stream;  // number of streams stored in buffer 
-extern int      cmode;      // segmentation mode
-extern int      nb_snd_thread;
-extern int      len_cut;
-extern bool     is_len_fixed;
-extern uint64_t snd_cnt;
-
-
 struct mbuf_table {
 	uint16_t len;                           // number of rte_mbuf 
 	struct rte_mbuf *m_table[MAX_BURST];    //mbuf table of packets to send
@@ -99,12 +90,18 @@ struct dpdk_port_statistics {
 } __rte_cache_aligned;
 
 extern struct   rte_eth_dev_tx_buffer   *tx_buffer;
-
+/* commandline options */
+extern int      		nb_concur;  // concurrency
+extern int      		mode_run;      //running mode(1 for normal sending mode; 2 for SYN flood simulator)
+extern int      		nb_snd_thread;
+extern int      		len_cut;
+extern bool     		is_len_fixed;
 extern int              snd_port;
 extern uint16_t         burst;
-extern volatile bool    force_quit;
 
-extern struct   rte_mempool* mp; //mempool used for initializing ports
+extern volatile bool    force_quit;
+extern int      		nb_stream;  // number of streams stored in buffer 
+extern struct   		rte_mempool* mp; //mempool used for initializing ports
 
 void dpdk_tx_flush(void);
 void dpdk_tx_buffer_unsent_callback(struct rte_mbuf **pkts, uint16_t unsent, void *userdata);
@@ -129,6 +126,7 @@ void run_send_threads(void);
 void wait_threads(void);
 void destroy_threads(void);
 void prepare_header(int id);
+void destroy_data_per_thread(void);
 #else
 extern struct   mbuf_table              tx_mbufs;
 extern struct   dpdk_port_statistics    port_stat;
@@ -144,4 +142,5 @@ void segment(struct buf_node *node, int mtd, uint32_t num, uint8_t p, uint16_t q
 int  store_stream_data(struct tuple4 tup, char *data, int length, int flag);
 void send_streams(void);
 
+void SYN_flood_simulator(void);
 #endif 

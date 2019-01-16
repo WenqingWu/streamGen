@@ -625,8 +625,10 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         /* reset header fields */
         node->offset = 0;
         set_field(node);
+		/* To cover as many stream data as possible, 
+		 * some random action was executed here.*/
 #ifndef SEND_THREAD
-        /* To randomizing the sending action
+        /* For single thread mode,
          * 1. remove the node from link list
          * 2. reinsert the node into a different location of link list
          * */
@@ -641,8 +643,20 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
 
         list_add_head(&node->list, buf_list_t);
 #else
-        /* TODO: randomizing the sending action for multi-thread mode */
-        
+        /* For multi-thread mode, 
+		 * Exchange stream data held in current buf_node with data in another raw random buf_node
+		 * */
+		int diff = nb_stream - nb_concur;
+		if (diff > 10) {
+			int new_ind = rand() % diff + nb_concur;
+			uint8_t *tmp_buf = node->tot_buf;
+			int tmp_len = node->len;
+
+			node->tot_buf = th_info[id].nodes[new_ind]->tot_buf;
+			node->len = th_info[id].nodes[new_ind]->len;
+			th_info[id].nodes[new_ind]->tot_buf = tmp_buf;
+			th_info[id].nodes[new_ind]->len = tmp_len;
+		}        
 #endif
     } else {
         printf("Got TCP state fault when ending stream.\n");
@@ -755,10 +769,9 @@ insert_buf_node(struct list_head *buf_list, uint8_t *buf, int length, struct tup
 
 /* Generating ACK correspond to PSH/ACK packet sent with send_data_packet */
 static void
-send_ack(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q, int id)
+send_ack(struct buf_node *node, uint8_t p, uint16_t q, int id)
 {
 	int         optlen = 0;
-	int         payload_offset = 0;
     uint32_t    ts_recent;
 
     optlen = cal_opt_len(TCP_FLAG_ACK);
@@ -838,7 +851,7 @@ send_data_pkt(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q, int
 
     dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen + length, p, q, id);
     /* send correspond ACK */
-	send_ack(node, length, p, q, id);
+	send_ack(node, p, q, id);
 }
 
 /* Description: cache total data of streams, where data for the same stream will be stored in the same buffer
@@ -1015,6 +1028,58 @@ counter (void)
     return cnt;
 }
 #ifndef SEND_THREAD
+/* Simulating SYN flood */
+void
+SYN_flood_simulator(void) 
+{
+    uint16_t    optlen;
+    int         i;   
+    uint32_t    ts_recent;
+    int         size = nids_params.n_tcp_streams;
+
+    pre_tsc = rte_rdtsc();
+    srand((int)time(0));
+    prepare_header(0);
+
+    ts_recent = 0; 
+
+    printf(" Attention please!!\nSYN Flood appears...\n");
+    while(!force_quit) {
+        for (i = 0; i < size; i++) {
+            struct list_head *head = &hash_buf.buf_list[i];
+            struct buf_node *buf_entry, *q;
+            list_for_each_entry_safe(buf_entry, q, head, list) {
+				/* SYN   '->' */
+				optlen = cal_opt_len(TCP_FLAG_SYN);
+				set_start_ts(buf_entry);
+
+				th_info[0].iph->id = htons(buf_entry->id);
+				th_info[0].iph->tot_len = htons(IP_HEADER_LEN + TCP_HEADER_LEN + optlen);
+				th_info[0].iph->saddr = buf_entry->saddr;
+				th_info[0].iph->daddr = buf_entry->daddr;
+				th_info[0].iph->check = ip_checksum( (struct iphdr *)th_info[0].iph);	
+				
+				generate_opt(buf_entry->ts, TCP_FLAG_SYN, (uint8_t *)th_info[0].tcph + TCP_HEADER_LEN, optlen, ts_recent);
+				
+				th_info[0].tcph->source = htons(buf_entry->sport);
+				th_info[0].tcph->dest = htons(buf_entry->dport);
+				th_info[0].tcph->seq = htonl(buf_entry->seq);
+				th_info[0].tcph->ack_seq = htonl(0);
+				th_info[0].tcph->doff = (TCP_HEADER_LEN + optlen) >> 2;
+				th_info[0].tcph->fin = 0;
+				th_info[0].tcph->syn = 1;         // SYN
+				th_info[0].tcph->psh = 0;
+				th_info[0].tcph->ack = 0;
+				th_info[0].tcph->check = tcp_checksum((struct iphdr*)th_info[0].iph, (struct tcphdr*)th_info[0].tcph);	
+
+				dpdk_send_pkt((uint8_t *)th_info[0].pkt, HEADER_LEN + optlen, snd_port, 0, 0);
+                set_field(buf_entry);
+            }
+        }
+    }
+}
+
+
 /* *
  * Description  : send stream stored in buffer table
  *
@@ -1080,7 +1145,8 @@ send_streams(void)
     }
 }
 #else
-/* loop of sending thread */
+
+/* Loop for sending thread */
 static void
 copy_data_per_thread(void)
 {
@@ -1127,6 +1193,17 @@ copy_data_per_thread(void)
     }
 }
     
+/* Free stream data copied before */
+void
+destroy_data_per_thread(void)
+{
+	int i;
+	for (i = 0; i < nb_snd_thread; i++) {
+		free(th_info[i].nodes);
+	}
+}
+
+/* Main loop for sending thread */
 void *
 send_loop(void* args)
 {
@@ -1154,7 +1231,12 @@ send_loop(void* args)
             n_snd = rand() % 3 + 1;         // 1 ~ 3
             while (n_snd--) {
                 /* TODO: modify delivered queue number for multi-threading mode */
-                send_packet(th_info[th_id].nodes[i], n_part, snd_port, th_id, th_id);
+				if (th_info[th_id].nodes[i]->state == TCP_ST_FIN_SENT_2) {
+					send_packet(th_info[th_id].nodes[i], n_part, snd_port, th_id, th_id);
+					break;
+				} else {
+					send_packet(th_info[th_id].nodes[i], n_part, snd_port, th_id, th_id);
+				}
             }
             cnt++;
             /* Reach concurrency */
@@ -1184,9 +1266,12 @@ run_send_threads(void)
     
     /* copy total stream data for every thread */
     copy_data_per_thread();
+	
+	/* Free hash buffer table*/
+	destroy_hash_buf();
     
     /* concurrency per thread */
-    concur_per_thread = nb_concur / nb_snd_thread - 1;
+    concur_per_thread = nb_concur / nb_snd_thread;
     if(concur_per_thread <= 0) {
         printf("Please give a larger concurrency!\n");
         exit(1);

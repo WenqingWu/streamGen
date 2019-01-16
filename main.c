@@ -54,11 +54,10 @@ struct rte_eth_dev_tx_buffer*   tx_buffer;
 
 struct hash_table               hash_buf;          //hash table
 int         nb_stream;
-uint64_t    snd_cnt;
 /* commandline arguments */
 int         nb_concur = 10;
 int         nb_snd_thread = 2;
-int         cmode = 1;
+int         mode_run = 1;
 int         len_cut = 5;
 bool 		is_len_fixed = false;
 
@@ -134,9 +133,11 @@ signal_handler(int signum)
 
 #ifdef SEND_THREAD
         wait_threads();
-#endif
+		destroy_data_per_thread();
+#else
         /* free hash table */
         destroy_hash_buf();
+#endif
         
         /* print statistics */
         print_final_stat();
@@ -391,7 +392,7 @@ stat_loop(void *arg)
 			const char topLeft[] = { 27, '[', '1', ';', '1', 'H','\0' };
 			printf("%s%s", clr, topLeft);
 		
-			printf("NIC Statistics ===================================\n");
+			printf("\nNIC Statistics ===================================\n");
 			printf("Accumulated Statistics from beginning ------------\n");
 			printf("  TX-packets:\t\t\t%"PRIu64"\n", stat_e.opackets - stats_start.opackets);
 			printf("  TX-bytes:\t\t\t%"PRIu64"\n", stat_e.obytes - stats_start.obytes);
@@ -457,8 +458,12 @@ lcore_main(void)
 		exit(1);
 	}
 #endif
-    /* send streams concurrently */
-    send_streams();
+	if (mode_run == 1 ){   // Normal Sending mode
+    	/* send streams concurrently */
+   	 	send_streams();
+	} else {               // Simulating SYN flood
+		SYN_flood_simulator();
+	}
 #endif
 }
 
@@ -483,10 +488,9 @@ print_usage(const char * prgname)
 		"\t\tTime interval for displaying statistics information.(default 2 for 2s)\n"
         "\t-b BURST: \n"
         "\t\tTransmiting burst while sending with DPDK (default 1, maximum 128)\n"
-        "\t-m CUT MODE(Not used for now):\n"
-        "\t\t1, equal mode\n"
-        "\t\t2, random mode\n"
-        "\t\t3, overlap mode\n\n",
+        "\t-m RUNNING MODE:\n"
+        "\t\t1, Normal Sending mode\n"
+        "\t\t2, Simulating SYN flood\n\n",
         prgname);
 }
 
@@ -518,9 +522,9 @@ get_options(int argc, char *argv[])
                 }
               	break;
             case 'm':
-              	cmode = atoi(optarg);
-                if (cmode > 3) {
-                    printf("\nInvalid segmentation method.(Only 3 methods supported for now.)\n");
+              	mode_run = atoi(optarg);
+                if (mode_run > 2) {
+                    printf("\nInvalid running mode.(Only 2 modes supported for now.)\n");
 					exit(1);
                 }
               	break;
@@ -596,7 +600,6 @@ main (int argc, char *argv[])
 	}
 
 	init_hash_buf();
-    snd_cnt = 0;
     nb_stream = 0;
     
     /* number of ports */
@@ -631,6 +634,7 @@ main (int argc, char *argv[])
 	
 #ifdef SEND_THREAD
     destroy_threads();
+	destroy_data_per_thread();
 #endif
 #ifdef STAT_THREAD
 	pthread_cancel(stat_id);
@@ -643,8 +647,9 @@ main (int argc, char *argv[])
 
 outdoor:
     printf("finishing ...\n");
+#ifndef SEND_THREAD
 	destroy_hash_buf();
-	
+#endif
 	return 0;
 }
 

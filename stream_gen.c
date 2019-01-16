@@ -150,7 +150,7 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q)
     /* transmit while reaching tx_burst */
     if (tx_mbufs.len >= burst) {
         /* sending interval (burst = 1) */
-        //burst_delay(1);        
+        burst_delay(1);        
         dpdk_send_burst(p, q);
         /* update size of tx_mbufs */
         tx_mbufs.len = 0;
@@ -671,17 +671,6 @@ destroy_hash_buf(void)
 	pthread_mutex_unlock(&hash_buf.lock);
 }
 
-
-/* Description	: free the node_buf when the data held in  node_buf was sent */
-static void
-flush_buf_node(struct buf_node *node) 
-{
-	memset(node->tot_buf, 0, MAX_BUFFER_SIZE);
-	memset(&node->tup, 0, sizeof(struct tuple4));
-	node->len = 0;
-}
-
-
 /*
  * Description	: compare two 4-tuple
  * Return 		: 0, if not equal; 1, if equal
@@ -756,10 +745,9 @@ insert_buf_node(struct list_head *buf_list, uint8_t *buf, int length, struct tup
 }
 /* Generate ACK correspond to PSH/ACK packet sent with send_data_pkt  */
 static void
-send_ack(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q)
+send_ack(struct buf_node *node, uint8_t p, uint16_t q)
 {
 	int         optlen = 0;
-	int         payload_offset = 0;
     uint32_t    ts_recent;
 
     optlen = cal_opt_len(TCP_FLAG_ACK);
@@ -839,7 +827,7 @@ send_data_pkt(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q)
 
     dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen + length, p, q);
     /* send correspond ACK */
-	send_ack(node, length, p, q);
+	send_ack(node, p, q);
 }
 
 /* Description: cache total data of streams, where data for the same stream will be stored in the same buffer
@@ -1013,6 +1001,58 @@ counter(void)
     }
     printf("\nCounter, Number of streams : %d\n", cnt);
     return cnt;
+}
+
+
+/* Simulating SYN flood */
+void
+SYN_flood_simulator(void) 
+{
+	uint16_t    optlen;
+	int 		i;
+    uint32_t    ts_recent;
+    int 		size = nids_params.n_tcp_streams;
+
+    pre_tsc = rte_rdtsc();
+    srand((int)time(0));
+	prepare_header();
+
+	ts_recent = 0;
+
+	printf(" Attention please!!\nSYN Flood appears...\n");
+    while(!force_quit) {
+        for (i = 0; i < size; i++) {
+            struct list_head *head = &hash_buf.buf_list[i];
+            struct buf_node *buf_entry, *q;
+            list_for_each_entry_safe(buf_entry, q, head, list) {
+				optlen = cal_opt_len(TCP_FLAG_SYN);
+				set_start_ts(buf_entry);
+
+				iph->id = htons(buf_entry->id);
+				iph->tot_len = htons(IP_HEADER_LEN + TCP_HEADER_LEN + optlen);
+				iph->saddr = buf_entry->saddr;
+				iph->daddr = buf_entry->daddr;
+				iph->check = ip_checksum( (struct iphdr *)iph);	
+				
+				generate_opt(buf_entry->ts, TCP_FLAG_SYN, (uint8_t *)tcph + TCP_HEADER_LEN, optlen, ts_recent);
+				
+				tcph->source = htons(buf_entry->sport);
+				tcph->dest = htons(buf_entry->dport);
+				tcph->seq = htonl(buf_entry->seq);
+				tcph->ack_seq = htonl(0);
+				tcph->doff = (TCP_HEADER_LEN + optlen) >> 2;
+				tcph->fin = 0;
+				tcph->syn = 1;         // SYN
+				tcph->psh = 0;
+				tcph->ack = 0;
+				tcph->check = tcp_checksum((struct iphdr*)iph, (struct tcphdr*)tcph);	
+
+				dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen, snd_port, 0);
+
+				set_field(buf_entry);
+            }
+        }
+    }
 }
 
 
