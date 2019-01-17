@@ -71,7 +71,7 @@ $ ./build/app/streamGen -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000
 
 ```bash
 $ ./build/streamGen -c 0x1 -n 1 -- -i pcapfils/xx.pcap -o 0 -m 2
-(-m : Running mode, default 1 for normal stream generation mode. 2 is given to simulate SYN flood)
+(-m : Running mode, default 1 for normal stream generation mode. 2 is given here for simulating SYN flood)
 ```
 
 
