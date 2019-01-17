@@ -74,7 +74,7 @@ burst_delay(uint16_t t, int id)
     }
     th_info[id].pre_tsc = cur_tsc;
 #else
-        diff_tsc = cur_tsc - pre_tsc;
+	diff_tsc = cur_tsc - pre_tsc;
         if (unlikely(diff_tsc >= drain_tsc)) {
             break;
         }
@@ -1027,7 +1027,7 @@ counter (void)
     printf("\nCounter, Number of streams: %d\n", cnt);
     return cnt;
 }
-#ifndef SEND_THREAD
+
 /* Simulating SYN flood */
 void
 SYN_flood_simulator(void) 
@@ -1037,7 +1037,7 @@ SYN_flood_simulator(void)
     uint32_t    ts_recent;
     int         size = nids_params.n_tcp_streams;
 
-    pre_tsc = rte_rdtsc();
+    th_info[0].pre_tsc = rte_rdtsc();
     srand((int)time(0));
     prepare_header(0);
 
@@ -1079,6 +1079,7 @@ SYN_flood_simulator(void)
     }
 }
 
+#ifndef SEND_THREAD
 
 /* *
  * Description  : send stream stored in buffer table
@@ -1145,7 +1146,7 @@ send_streams(void)
     }
 }
 #else
-
+    
 /* Loop for sending thread */
 static void
 copy_data_per_thread(void)
@@ -1192,7 +1193,7 @@ copy_data_per_thread(void)
         printf("\nWarning: number of stream copied is less than  number of stream read.(cnt:%d, nb_stream:%d)\n", cnt, nb_stream);
     }
 }
-    
+
 /* Free stream data copied before */
 void
 destroy_data_per_thread(void)

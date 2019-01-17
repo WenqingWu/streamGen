@@ -56,7 +56,7 @@ struct hash_table               hash_buf;          //hash table
 int         nb_stream;
 /* commandline arguments */
 int         nb_concur = 10;
-int         nb_snd_thread = 2;
+int         nb_snd_thread = 1;
 int         mode_run = 1;
 int         len_cut = 5;
 bool 		is_len_fixed = false;
@@ -517,21 +517,21 @@ get_options(int argc, char *argv[])
               	break;
             case 'b':
               	burst = (uint16_t)atoi(optarg);
-                if (burst >= MAX_BURST) {
-                    rte_exit(EXIT_FAILURE, "\nBurst exceeds maximum of burst(%d).\n", MAX_BURST);
+                if (burst < 1 || burst >= MAX_BURST) {
+                    rte_exit(EXIT_FAILURE, "\nInvalid burst.(1 ~ %d).\n", MAX_BURST);
                 }
               	break;
             case 'm':
               	mode_run = atoi(optarg);
-                if (mode_run > 2) {
-                    printf("\nInvalid running mode.(Only 2 modes supported for now.)\n");
+                if (mode_run < 1 || mode_run > 2) {
+                    printf("\nInvalid running mode.(2 modes supported for now.)\n");
 					exit(1);
                 }
               	break;
             case 't':
               	nb_snd_thread = atoi(optarg);
-				if (nb_snd_thread > NUM_SEND_THREAD) {
-					rte_exit(EXIT_FAILURE, "\nNumber of thread is too large.(Maximum %d)\n", NUM_SEND_THREAD);
+				if (nb_snd_thread < 1 || nb_snd_thread > NUM_SEND_THREAD) {
+					rte_exit(EXIT_FAILURE, "\nInvalid number of thread.(1 ~ %d)\n", NUM_SEND_THREAD);
 				}
               	break;
 #ifdef STAT_THREAD
@@ -542,6 +542,9 @@ get_options(int argc, char *argv[])
             case 'l':
               	len_cut = atoi(optarg);
 				is_len_fixed = true;
+				if (len_cut < 0) {
+					rte_exit(EXIT_FAILURE, "\nInvalid length of payload.\n");
+				}
 				if (len_cut > MAX_SEG_SIZE) {
 					printf("\nWarning, length of payload exceeds maximum segment size, will be replaced by MSS.\n");
 				}
