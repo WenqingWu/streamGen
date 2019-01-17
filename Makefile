@@ -44,14 +44,7 @@ APP = streamGen
 # all source are stored in SRCS-y
 # SRCS-y := main.c stream_gen.c
 
-# MODE := multi-thread
-ifeq ($(MODE),multi-thread)
-SRCS-y := main.c stream_gen-multi-thread.c
-$(warning "multi-thread")
-else
 SRCS-y := main.c stream_gen.c
-$(warning "single-thread")
-endif
 
 LDLIBS     = 
 
@@ -63,6 +56,7 @@ LNETLIB     = -lnet
 
 LIBS_CFLAGS = -Ilibnids-1.24/src -Iinclude  $(PCAP_CFLAGS) $(LNET_CFLAGS) 
 # LIBS_CFLAGS += -DTX_BUFFER
+# LIBS_CFLAGS += -DUSE_PDUMP
 # LIBS_CFLAGS += -DSEND_THREAD
 LIBS_CFLAGS += -DSTAT_THREAD
 

@@ -103,10 +103,6 @@ extern volatile bool    force_quit;
 extern int      		nb_stream;  // number of streams stored in buffer 
 extern struct   		rte_mempool* mp; //mempool used for initializing ports
 
-void dpdk_tx_flush(void);
-void dpdk_tx_buffer_unsent_callback(struct rte_mbuf **pkts, uint16_t unsent, void *userdata);
-
-#ifdef SEND_THREAD
 struct thread_info {
     pthread_t               thread_id;
     struct rte_mempool*     mbuf_pool;
@@ -122,25 +118,22 @@ struct thread_info {
 };
 extern struct thread_info   th_info[NUM_SEND_THREAD];
 
+#ifdef SEND_THREAD
 void run_send_threads(void);
 void wait_threads(void);
 void destroy_threads(void);
-void prepare_header(int id);
 void destroy_data_per_thread(void);
 #else
-extern struct   mbuf_table              tx_mbufs;
-extern struct   dpdk_port_statistics    port_stat;
-
-void prepare_header(void);
+void SYN_flood_simulator(void);
+void send_streams(void);
 #endif //SEND_THREAD
 
 void init_hash_buf(void);
 void destroy_hash_buf(void);
 void dump_rest_buf(void);
 
-void segment(struct buf_node *node, int mtd, uint32_t num, uint8_t p, uint16_t q);
-int  store_stream_data(struct tuple4 tup, char *data, int length, int flag);
-void send_streams(void);
+void dpdk_tx_flush(void);
 
-void SYN_flood_simulator(void);
+void prepare_header(int id);
+int  store_stream_data(struct tuple4 tup, char *data, int length, int flag);
 #endif 

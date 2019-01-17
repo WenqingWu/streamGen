@@ -39,16 +39,11 @@ pthread_t 		stat_id;
 #endif
 volatile bool force_quit;
 
-#ifdef SEND_THREAD
 struct thread_info              th_info[NUM_SEND_THREAD];
-#else
-struct mbuf_table               tx_mbufs;
-struct dpdk_port_statistics     port_stat = {0};
-#endif
+
 int                             snd_port = 0;
 uint16_t                        burst = DEFAULT_BURST_SIZE;           // tx burst, default 64
 struct rte_mempool*             mp;
-struct rte_eth_dev_tx_buffer*   tx_buffer;
 
 #define int_ntoa(x)	inet_ntoa(*((struct in_addr *)&x))
 
@@ -87,8 +82,8 @@ print_final_stat(void)
 	rte_eth_stats_get(snd_port, &stats_end);
 
     printf("\n\n\n+++++ Accumulated Statistics for streamGen +++++\n");
-#ifdef SEND_THREAD
-    int i;
+    
+	int i;
     uint64_t tx_total = 0, drop_total = 0;
     for (i = 0; i < nb_snd_thread; ++i) {
         tx_total += th_info[i].stats.tx;
@@ -102,15 +97,6 @@ print_final_stat(void)
     printf("  TX-packets:\t\t\t%"PRIu64"\n", stats_end.opackets - stats_start.opackets);
     printf("  TX-bytes:\t\t\t%"PRIu64"\n", stats_end.obytes - stats_start.obytes);
     printf("  TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
-#else
-	printf("---------- Statistics from application ---------\n");
-    printf("  TX-packets:\t\t\t%"PRIu64"\n", port_stat.tx);
-    printf("  TX-dropped:\t\t\t%"PRIu64"\n", port_stat.dropped);
-    printf("------------- Statistics from NICs -------------\n");
-    printf("  TX-packets:\t\t\t%"PRIu64"\n",stats_end.opackets - stats_start.opackets);
-    printf("  TX-bytes:\t\t\t%"PRIu64"\n", stats_end.obytes - stats_start.obytes);
-    printf("  TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
-#endif
     printf("++++++++++++++++++++++++++++++++++++++++++++++++\n");
 }
 
@@ -132,7 +118,7 @@ signal_handler(int signum)
 #endif
 
 #ifdef SEND_THREAD
-        wait_threads();
+		wait_threads();
 		destroy_data_per_thread();
 #else
         /* free hash table */
@@ -323,22 +309,7 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
         if (retval < 0)
             return retval;
     }
-# ifdef TX_BUFFER      /* Note: not used for now!! */
-	/* Initialize TX buffers */
-	tx_buffer = rte_zmalloc_socket("tx_buffer", RTE_ETH_TX_BUFFER_SIZE(burst), 0, rte_eth_dev_socket_id(port));
-    if (tx_buffer == NULL) {
-		printf("Cannot allocate buffer for tx on port %u\n", (unsigned) port);
-        exit(1);
-    }
-	rte_eth_tx_buffer_init(tx_buffer, burst);
 
-	retval = rte_eth_tx_buffer_set_err_callback(tx_buffer,
-			dpdk_tx_buffer_unsent_callback, &port_stat.dropped);
-	if (retval < 0) {
-		printf("Cannot set error callback for tx buffer on port %u\n", (unsigned) port);
-        exit(1);
-    }
-#endif	
     /* Start the Ethernet port. */
     retval = rte_eth_dev_start(port);
     if (retval < 0)
@@ -428,9 +399,8 @@ lcore_main(void)
 	
     printf("\nStart sending packets. [Ctrl+C to quit]\n");
 #ifdef SEND_THREAD
-    /* send streams concurrently with multi-thread*/
-    run_send_threads();
-	
+	/* send streams concurrently with multi-thread*/
+	run_send_threads();
 #ifdef STAT_THREAD
 	/* start statistics thread */
 	pthread_attr_init(&attr);
@@ -444,7 +414,7 @@ lcore_main(void)
 	}
 #endif
 	/* wait sending thread */
-    wait_threads();
+	wait_threads();
 #else
 #ifdef STAT_THREAD
 	/* start statistics thread */
@@ -458,7 +428,7 @@ lcore_main(void)
 		exit(1);
 	}
 #endif
-	if (mode_run == 1 ){   // Normal Sending mode
+	if (mode_run == 1 ){   // Normal stream generation mode
     	/* send streams concurrently */
    	 	send_streams();
 	} else {               // Simulating SYN flood
@@ -636,9 +606,10 @@ main (int argc, char *argv[])
     lcore_main(); 
 	
 #ifdef SEND_THREAD
-    destroy_threads();
+	destroy_threads();
 	destroy_data_per_thread();
 #endif
+
 #ifdef STAT_THREAD
 	pthread_cancel(stat_id);
 #endif
