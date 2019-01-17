@@ -85,8 +85,8 @@ struct mbuf_table {
 
 /* Per-port statistics struct */
 struct dpdk_port_statistics {
-	uint64_t tx;                // number of packets sent
-	uint64_t dropped;           // number of packets dropped
+	volatile uint64_t tx;                // number of packets sent
+	volatile uint64_t dropped;           // number of packets dropped
 } __rte_cache_aligned;
 
 extern struct   rte_eth_dev_tx_buffer   *tx_buffer;
