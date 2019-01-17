@@ -63,7 +63,6 @@ $ ./build/app/streamGen -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000
 
 ```bash
 1. Uncomment "LIBS_CFLAGS += -DSEND_THREAD" in Makefile
-2. Uncomment "MODE := multi-thread" in Makefile
 3. Rebuild project
 ```
 
