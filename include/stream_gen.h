@@ -23,6 +23,7 @@
 #include <rte_cycles.h>
 #include <rte_atomic.h>
 
+#define PACKET_LEN 			1600     /* a little bigger than MTU */
 #define DEFAULT_BURST_SIZE  1
 #define MAX_BURST           128
 #define PKT_RETRY_COUNT     10
@@ -54,21 +55,21 @@
 /* total data of a stream is store in a buf_node struct */
 struct buf_node {
 	struct list_head    list;
-	struct      tuple4 tup;
-	uint8_t*    tot_buf;
-	int	        len;					// size for the whole data for now
-    int         offset;                 // offset of data to send
-    uint8_t     state;                  // state of TCP stream
-    uint16_t    id;                     // identification
-    uint16_t    rcv_id;                     // identification
-    uint32_t    saddr;
-    uint32_t    daddr;
-    uint16_t    sport;
-    uint16_t    dport;
-    uint32_t    seq;
-    uint32_t    ack_seq;
-    uint32_t    ts;                 // timestamp
-    uint32_t    ts_peer;            // timestamp in packets of the opposite direction
+	struct      		tuple4 tup;
+	uint8_t*   			tot_buf;
+	int	    			len;					// size for the whole data for now
+    int     			offset;                 // offset of data to send
+    uint8_t    			state;                  // state of TCP stream
+    uint16_t   			id;                     // identification
+    uint16_t    		rcv_id;                 // identification of receiver side
+    uint32_t    		saddr;
+    uint32_t    		daddr;
+    uint16_t    		sport;
+    uint16_t    		dport;
+    uint32_t   			seq;
+    uint32_t   			ack_seq;
+	uint32_t   			ts;                 // timestamp
+    uint32_t   			ts_peer;            // timestamp in packets sent by opposite direction
 };
 
 struct hash_table {
@@ -79,8 +80,8 @@ struct hash_table {
 extern struct hash_table hash_buf;      // hash table used to retrieve buf_node 
 
 struct mbuf_table {
-	uint16_t len;                           // number of rte_mbuf 
-	struct rte_mbuf *m_table[MAX_BURST];    //mbuf table of packets to send
+	volatile uint16_t 	len;                           // number of rte_mbuf 
+	struct rte_mbuf*	m_table[MAX_BURST];    //mbuf table of packets to send
 };
 
 /* Per-port statistics struct */
@@ -131,7 +132,6 @@ void send_streams(void);
 void init_hash_buf(void);
 void destroy_hash_buf(void);
 void dump_rest_buf(void);
-
 void dpdk_tx_flush(void);
 
 void prepare_header(int id);

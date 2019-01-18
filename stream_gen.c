@@ -9,8 +9,6 @@
 #include "libnids-1.24/src/nids.h"
 #include "libnids-1.24/src/hash.h"
 
-/* TODO: need modifing for multi-thread mode */
-
 #ifdef SEND_THREAD
 static int                  concur_per_thread;
 #endif
@@ -72,9 +70,8 @@ dpdk_send_burst(uint8_t p, uint16_t q, int id)
         } while(++nb_tx < cnt);
     }
 }
-/* *
- * Description  : flush packets remain in mbufs when exit application 
- * */
+
+/* Description  : flush packets remain in mbufs when exit application */
 void
 dpdk_tx_flush(void)
 {
@@ -111,7 +108,7 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q, int id)
     /* transmit while reaching tx_burst */
     if (th_info[id].tx_mbufs.len >= burst) {
         /* sending interval (burst = 1) */
-        //burst_delay(1, id);        
+        burst_delay(1, id);        
         dpdk_send_burst(p, q, id);
         /* update size of th_info[id].tx_mbufs.*/
         th_info[id].tx_mbufs.len = 0;
@@ -160,6 +157,9 @@ set_field(struct buf_node* node)
     /* initialize TCP timestamp (see 'set_start_ts' for assignment)*/
     node->ts = 0;
     node->ts_peer = 0;
+
+	node->state = TCP_ST_CLOSED;
+	node->offset = 0;
 }
 
 void 
@@ -567,9 +567,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
 
         dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
         
-		node->state = TCP_ST_CLOSED;
         /* reset header fields */
-        node->offset = 0;
         set_field(node);
 		/* To cover as many stream data as possible, 
 		 * some random action was executed here.*/
@@ -592,10 +590,10 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         /* For multi-thread mode, 
 		 * Exchange stream data held in current buf_node with data in another raw random buf_node
 		 * */
-		int diff = nb_stream - nb_concur;
+		int diff = nb_stream - nb_concur - 2;
 		if (diff > 10) {
 			int new_ind = rand() % diff + nb_concur;
-			uint8_t *tmp_buf = node->tot_buf;
+ 			uint8_t *tmp_buf = node->tot_buf;
 			int tmp_len = node->len;
 
 			node->tot_buf = th_info[id].nodes[new_ind]->tot_buf;
@@ -858,28 +856,7 @@ store_stream_data(struct tuple4 tup, char *data, int length, int flag)
             }
         }
 	} else if (flag == NIDS_CLOSE) {
-#if 0
-		/* stream finished */
-		struct buf_node *node = get_buf_node(tup, index);
-		if (node == NULL) {
-#ifdef DEBUG_SEGMENTOR
-			fprintf(stderr, "stream_segmentor: could not find correspond buf node.\n");
-#endif
-			return 0;
-		}
-        int num = 10;    //number of parts to segment, default: 15.
-        int loop = nb_reuse;
-        while (loop--) {
-            /* calling sending function */	
-            send_stream(node, num, 0, 0);
-
-            if (++num > 20)
-                num = 10;
-        }
-        /* free node from hash buffer */
-		list_delete_entry(&node->list);
-		free(node);
-#endif
+		/* Not used for now !! */
     } else {
 	/* other state */
 #ifdef DEBUG_SEGMENTOR
@@ -1098,6 +1075,10 @@ send_streams(void)
             struct list_head *head = &hash_buf.buf_list[i];
             struct buf_node *buf_entry, *q;
             list_for_each_entry_safe(buf_entry, q, head, list) {
+				/* skip packets with small payload*/
+                if (is_len_fixed && buf_entry->len < len_cut) {
+                    continue;
+                } 	
                 /* Keep sending several packets of a stream */
                 n_snd = rand() % 3 + 1;         // 1 ~ 3
                 while (n_snd--) {
@@ -1292,4 +1273,4 @@ destroy_threads(void)
         pthread_cancel(th_info[i].thread_id);
 	}
 }
-#endif
+#endif  //ifndef SEND_THREAD 

@@ -7,7 +7,6 @@ stream generator
 ./   
  |__ main.c   
  |__ stream_gen.c   
- |__ stream_gen-multi-thread.c   
  |__ include/   
  |__ libnids-1.24/   
  |__ pcapfiles/  

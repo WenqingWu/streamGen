@@ -79,7 +79,6 @@ static void
 print_final_stat(void)
 {
 	struct rte_eth_stats stats_end;
-	rte_eth_stats_get(snd_port, &stats_end);
 
     printf("\n\n\n+++++ Accumulated Statistics for streamGen +++++\n");
     
@@ -89,6 +88,8 @@ print_final_stat(void)
         tx_total += th_info[i].stats.tx;
         drop_total += th_info[i].stats.dropped;
     }   
+
+	rte_eth_stats_get(snd_port, &stats_end);
 
 	printf("---------- Statistics from application ---------\n");
     printf("  TX-packets:\t\t\t%"PRIu64"\n", tx_total);
@@ -133,7 +134,6 @@ signal_handler(int signum)
 		kill(getpid(), signum);
     }   
 }
-
 
 /* struct tuple4 contains addresses and port numbers of the TCP connections
  * the following auxiliary function produces a string looking like
@@ -415,7 +415,9 @@ lcore_main(void)
 #endif
 	/* wait sending thread */
 	wait_threads();
-#else
+
+#else  //#ifdef SEND_THREAD
+
 #ifdef STAT_THREAD
 	/* start statistics thread */
 	pthread_attr_init(&attr);
@@ -443,11 +445,11 @@ print_usage(const char * prgname)
 {
     printf("Usage: %s [EAL options] -- [options] [input file]\n"
         "\n\t[options]:\n"
-        "\t-h help: display usage infomation\n"
+        "\t-h HELP: Display usage infomation\n"
         "\t-i PCAP FILE:\n"
         "\t\tInput packets which contains network trace\n"
         "\t-o INTERFACE:\n"
-        "\t\tinterface for sending packets\n"
+        "\t\tInterface used for sending packets\n"
         "\t\t(e.g. 1 for port1 with DPDK, default 0)\n"
         "\t-c CONCURRENCY: concurrency of sending streams.(default 10)\n"
         "\t-t THREADS:\n"
@@ -603,7 +605,8 @@ main (int argc, char *argv[])
 	rte_eth_stats_get(snd_port, &stats_start);
 
 	nids_register_tcp (tcp_callback);
-    lcore_main(); 
+    /* main stream generation loop */
+	lcore_main(); 
 	
 #ifdef SEND_THREAD
 	destroy_threads();
@@ -621,9 +624,11 @@ main (int argc, char *argv[])
 
 outdoor:
     printf("finishing ...\n");
+
 #ifndef SEND_THREAD
 	destroy_hash_buf();
 #endif
+
 	return 0;
 }
 
