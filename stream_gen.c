@@ -590,6 +590,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         /* For multi-thread mode, 
 		 * Exchange stream data held in current buf_node with data in another raw random buf_node
 		 * */
+#if 0
 		int diff = nb_stream - nb_concur - 2;
 		if (diff > 10) {
 			int new_ind = rand() % diff + nb_concur;
@@ -601,6 +602,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
 			th_info[id].nodes[new_ind]->tot_buf = tmp_buf;
 			th_info[id].nodes[new_ind]->len = tmp_len;
 		}        
+#endif
 #endif
     } else {
         printf("Got TCP state fault when ending stream.\n");
