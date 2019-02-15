@@ -590,10 +590,9 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         /* For multi-thread mode, 
 		 * Exchange stream data held in current buf_node with data in another raw random buf_node
 		 * */
-#if 0
 		int diff = nb_stream - nb_concur - 2;
 		if (diff > 10) {
-			int new_ind = rand() % diff + nb_concur;
+			int new_ind = rand() % diff + nb_concur + 1;
  			uint8_t *tmp_buf = node->tot_buf;
 			int tmp_len = node->len;
 
@@ -602,7 +601,6 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
 			th_info[id].nodes[new_ind]->tot_buf = tmp_buf;
 			th_info[id].nodes[new_ind]->len = tmp_len;
 		}        
-#endif
 #endif
     } else {
         printf("Got TCP state fault when ending stream.\n");
@@ -1185,9 +1183,11 @@ send_loop(void* args)
         /* Sending 'concur_per_thread' packets */
         for (i = th_id ; i < nb_stream; i+= nb_snd_thread) {
             /* skip packets with small payload */
+#if 0
             if (is_len_fixed && th_info[th_id].nodes[i]->len < len_cut){
                 continue;
             }
+#endif
             /* Keep sending several packets of a stream */
             n_snd = rand() % 3 + 1;         // 1 ~ 3
             while (n_snd--) {
@@ -1261,6 +1261,7 @@ wait_threads(void)
 {
     int i;
 
+	printf("\n");
 	for (i = 0; i < nb_snd_thread; ++i) {
         pthread_join(th_info[i].thread_id, NULL);
 	}

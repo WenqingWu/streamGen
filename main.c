@@ -80,7 +80,7 @@ print_final_stat(void)
 {
 	struct rte_eth_stats stats_end;
 
-    printf("\n\n\n+++++ Accumulated Statistics for streamGen +++++\n");
+    printf("\n\n\n++++++ Accumulated Statistics for streamGen +++++\n");
     
 	int i;
     uint64_t tx_total = 0, drop_total = 0;
@@ -91,14 +91,14 @@ print_final_stat(void)
 
 	rte_eth_stats_get(snd_port, &stats_end);
 
-	printf("---------- Statistics from application ---------\n");
-    printf("  TX-packets:\t\t\t%"PRIu64"\n", tx_total);
-    printf("  TX-dropped:\t\t\t%"PRIu64"\n", drop_total);
-    printf("------------- Statistics from NICs -------------\n");
-    printf("  TX-packets:\t\t\t%"PRIu64"\n", stats_end.opackets - stats_start.opackets);
-    printf("  TX-bytes:\t\t\t%"PRIu64"\n", stats_end.obytes - stats_start.obytes);
-    printf("  TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
-    printf("++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	printf("----------- Statistics from application ----------\n");
+    printf("   TX-packets:\t\t\t%"PRIu64"\n", tx_total);
+    printf("   TX-dropped:\t\t\t%"PRIu64"\n", drop_total);
+    printf("-------------- Statistics from NICs --------------\n");
+    printf("   TX-packets:\t\t\t%"PRIu64"\n", stats_end.opackets - stats_start.opackets);
+    printf("   TX-bytes:\t\t\t%"PRIu64"\n", stats_end.obytes - stats_start.obytes);
+    printf("   TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
+    printf("++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 }
 
 
@@ -377,7 +377,7 @@ stat_loop(void *arg)
 			
 			stat_s.obytes = stat_e.obytes;
 			stat_s.opackets = stat_e.opackets;
-			printf("==================================================\n");
+			printf("==================================================\n\n");
 		}
 	}
 }
