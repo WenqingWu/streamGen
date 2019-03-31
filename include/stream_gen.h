@@ -38,8 +38,6 @@
 #define MAX_MBUF_PER_THREAD 1024
 #endif
 
-#define PACKET_LEN 			1600     /* a little bigger than MTU */
-
 #define TCP_OPT_TIMESTAMP_ENABLED   1	/* enabled for rtt measure */
 #define TCP_OPT_SACK_ENABLED        0	/* not implemented */
 
@@ -92,8 +90,13 @@ extern int      len_cut;
 extern bool     is_len_fixed;
 extern uint64_t snd_cnt;
 extern bool		syn_flood_set;
-extern volatile bool    force_quit;
 extern char 	dev[20];
+extern bool     dst_port_fixed;
+extern bool     get_dst_from_file;
+extern char     dst_addr_file[20];
+extern uint16_t dst_port;
+
+extern volatile bool    force_quit;
 
 #ifdef USE_PCAP
 extern char     error[LIBNET_ERRBUF_SIZE];

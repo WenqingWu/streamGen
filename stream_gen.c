@@ -186,10 +186,7 @@ set_field(struct buf_node* node)
     node->daddr = inet_addr(dst_ip_addr);
 
 	node->sport = (uint16_t) libnet_get_prand(LIBNET_PRu16);
-	if (node->sport <= 1024) node->sport += 1024; // skip reserved port numbers
-
 	node->dport = (uint16_t) libnet_get_prand(LIBNET_PRu16);
-	if (node->dport <= 1024) node->dport += 1024;
 
 	node->id = (uint16_t) (libnet_get_prand(LIBNET_PR16) % 32768);
     node->rcv_id = 0;
@@ -1159,6 +1156,21 @@ SYN_flood_simulator(void)
     int         i;   
     uint32_t    ts_recent;
     int         size = nids_params.n_tcp_streams;
+	char        tmp_addr[20];
+
+    // Get IP address and MAC address of destination from given file.
+    if (get_dst_from_file){
+        FILE *fp; 
+        if ((fp = fopen(dst_addr_file, "rb")) == NULL) {
+            fprintf(stderr, "Failed to open file %s.\n", dst_addr_file);
+            exit(1);
+        }            
+        fscanf(fp, "%s", tmp_addr);
+        fscanf(fp, "%02X:%02X:%02X:%02X:%02X:%02X", 
+                    (unsigned int*)&dst_mac[0], (unsigned int*)&dst_mac[1], (unsigned int*)&dst_mac[2],
+                    (unsigned int*)&dst_mac[3], (unsigned int*)&dst_mac[4], (unsigned int*)&dst_mac[5]);
+        fclose(fp);
+    } 
 
     srand((int)time(0));
     prepare_header();
@@ -1178,11 +1190,20 @@ SYN_flood_simulator(void)
                 iph->id = htons(buf_entry->id);
                 iph->tot_len = htons(IP_HEADER_LEN + TCP_HEADER_LEN + optlen);                
 				iph->saddr = buf_entry->saddr;
-                iph->daddr = buf_entry->daddr;
+				if (!get_dst_from_file)
+					iph->daddr = buf_entry->daddr;
+                else
+                    iph->daddr = inet_addr(tmp_addr);
+
                 iph->check = ip_checksum( (struct iphdr *)iph);
                 generate_opt(buf_entry->ts, TCP_FLAG_SYN, (uint8_t *)tcph + TCP_HEADER_LEN, optlen, ts_recent);
                 tcph->source = htons(buf_entry->sport);
-                tcph->dest = htons(buf_entry->dport);
+				
+				if (!dst_port_fixed)
+					tcph->dest = htons(buf_entry->dport);
+                else
+                    tcph->dest = htons(dst_port);
+
                 tcph->seq = htonl(buf_entry->seq);
                 tcph->ack_seq = htonl(0);
                 tcph->doff = (TCP_HEADER_LEN + optlen) >> 2;

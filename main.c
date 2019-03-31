@@ -64,9 +64,13 @@ int         len_cut = 5;
 bool 		is_len_fixed = false;
 bool        syn_flood_set = false;
 int			mode_run = 1; // 1 for normal stream generator, 2 for syn flood simulator
-volatile bool force_quit;
 char        dev[20] = "eth0";    // network interface for sending packets
+bool        dst_port_fixed = false;
+uint16_t    dst_port;
+bool        get_dst_from_file = false;
+char        dst_addr_file[20];
 
+volatile bool force_quit;
 
 #ifdef USE_PCAP
 char        error[LIBNET_ERRBUF_SIZE];
@@ -522,6 +526,10 @@ print_usage(const char * prgname)
 		"\t\tTime interval for displaying statistics information.(default 2 for 2s)\n"
         "\t-b BURST: \n"
         "\t\tTransmiting burst while sending with DPDK (default 1, maximum 128)\n"
+        "\t-d DEST_PORT: \n"
+        "\t\t Give a fixed dest_port for SYN Flooding.\n"
+        "\t-f FILE NAME: \n"
+        "\t\t File which contains dest IP address and dest MAC address.\n"
         "\t-m CUT MODE(Not used for now):\n"
         "\t\t1, equal mode\n"
         "\t\t2, random mode\n"
@@ -535,7 +543,7 @@ get_options(int argc, char *argv[])
 {
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "hi:o:m:b:c:l:t:T:")) != -1) {
+    while ((opt = getopt(argc, argv, "hi:o:m:b:c:d:f:l:t:T:")) != -1) {
         switch(opt) {
             case 'h':
                 print_usage(argv[0]);
@@ -554,6 +562,14 @@ get_options(int argc, char *argv[])
             case 'c':
               	nb_concur = atoi(optarg);
               	break;
+            case 'd':
+                dst_port = atoi(optarg);
+                dst_port_fixed = true;
+                break;
+            case 'f':
+                strcpy(dst_addr_file, optarg);
+                get_dst_from_file = true;
+                break;
             case 'b':
 #ifdef USE_DPDK
               	burst = (uint16_t)atoi(optarg);
