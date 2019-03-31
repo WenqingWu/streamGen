@@ -21,7 +21,6 @@ char dst_ip_addr[16];
 uint8_t src_mac[6] = {0x90, 0xe2, 0xba, 0x14, 0xbe, 0xae}; //b0
 uint8_t dst_mac[6] = {0x00, 0x30, 0x48, 0xf7, 0xc3, 0x4a}; //b1
 
-
 #define US_TO_TSC(t) ((rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S ) * (t)
 /* * 
  * Description  : delay for a while (used for set a sending interval)
@@ -110,7 +109,7 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q, int id)
     /* transmit while reaching tx_burst */
     if (th_info[id].tx_mbufs.len >= burst) {
         /* sending interval (burst = 1) */
-        burst_delay(1, id);        
+        burst_delay(10, id);        
         dpdk_send_burst(p, q, id);
         /* update size of th_info[id].tx_mbufs.*/
         th_info[id].tx_mbufs.len = 0;
@@ -128,28 +127,14 @@ set_field(struct buf_node* node)
     uint8_t adr_3 = (uint8_t) libnet_get_prand(LIBNET_PR8); /*  0~255 */
 	uint8_t adr_4 = (uint8_t) libnet_get_prand(LIBNET_PR8); /*  0~255 */
 
-    if (adr_3 == adr_4) {
-        adr_4 = (adr_4 + 11) % 254; 
-    }    
-
 	sprintf(src_ip_addr, "10.0.%u.%u", adr_3, adr_4);	
 	sprintf(dst_ip_addr, "10.1.%u.%u", adr_4, adr_3);	
 
     node->saddr = inet_addr(src_ip_addr);
-	if (syn_flood_set) {
-		node->daddr = inet_addr("10.10.0.113");
-	} else {
-		node->daddr = inet_addr(dst_ip_addr);
-	}
+	node->daddr = inet_addr(dst_ip_addr);
+
 	node->sport = (uint16_t) libnet_get_prand(LIBNET_PRu16);
-	if (node->sport <= 1024) node->sport += 1024; // skip reserved port numbers
-
 	node->dport = (uint16_t) libnet_get_prand(LIBNET_PRu16);
-	if (node->dport <= 1024) node->dport += 1024;
-
-    if (node->sport == node->dport) {
-        node->dport = (node->dport + 123) % 65530;
-    } 
 
 	node->id = (uint16_t) (libnet_get_prand(LIBNET_PR16) % 32768);
     node->rcv_id = 0;
@@ -173,10 +158,10 @@ prepare_header(int id)
 	struct ethhdr *eth = (struct ethhdr *) th_info[id].pkt;
     int i;
 
-    for (i = 0; i < 6; i++) {
-        th_info[id].pkt[i] = dst_mac[i];
-    }   
-	
+	for (i = 0; i < 6; i++) {
+		th_info[id].pkt[i] = dst_mac[i];
+	}   
+
 	if (syn_flood_set) {
 	// While simulating SYN flooding, set packets' source MAC address with MAC address of snd_port
 		struct ether_addr port_addr;
@@ -191,7 +176,7 @@ prepare_header(int id)
     /* set iphdr pointer */
     th_info[id].iph = (struct iphdr *)(eth + 1);
     if (!th_info[id].iph) {
-        printf ("initialize iphdr failed.\n");
+        fprintf (stderr, "initialize iphdr failed.\n");
         return;
     }
      /* Fill in the IP Header */
@@ -1010,9 +995,25 @@ SYN_flood_simulator(void)
     int         i;   
     uint32_t    ts_recent;
     int         size = nids_params.n_tcp_streams;
+	char 		tmp_addr[20];
 
 	/* Initializing */
 	init_thread_info();
+
+	// Get IP address and MAC address of destination from given file.
+	if (get_dst_from_file){
+		FILE *fp;
+		if ((fp = fopen(dst_addr_file, "rb")) == NULL) {
+			fprintf(stderr, "Failed to open file %s.\n", dst_addr_file);
+			exit(1);
+		}		
+		fscanf(fp, "%s", tmp_addr);
+		fscanf(fp, "%02X:%02X:%02X:%02X:%02X:%02X", 
+					(unsigned int*)&dst_mac[0], (unsigned int*)&dst_mac[1], (unsigned int*)&dst_mac[2], 
+					(unsigned int*)&dst_mac[3], (unsigned int*)&dst_mac[4], (unsigned int*)&dst_mac[5]);
+
+		fclose(fp);
+	}
 
     srand((int)time(0));
     prepare_header(0);
@@ -1032,13 +1033,23 @@ SYN_flood_simulator(void)
 				th_info[0].iph->id = htons(buf_entry->id);
 				th_info[0].iph->tot_len = htons(IP_HEADER_LEN + TCP_HEADER_LEN + optlen);
 				th_info[0].iph->saddr = buf_entry->saddr;
-				th_info[0].iph->daddr = buf_entry->daddr;
+				
+				if (!get_dst_from_file)
+					th_info[0].iph->daddr = buf_entry->daddr;
+				else
+					th_info[0].iph->daddr = inet_addr(tmp_addr);
+					
 				th_info[0].iph->check = ip_checksum( (struct iphdr *)th_info[0].iph);	
 				
 				generate_opt(buf_entry->ts, TCP_FLAG_SYN, (uint8_t *)th_info[0].tcph + TCP_HEADER_LEN, optlen, ts_recent);
 				
 				th_info[0].tcph->source = htons(buf_entry->sport);
-				th_info[0].tcph->dest = htons(buf_entry->dport);
+
+				if (!dst_port_fixed)
+					th_info[0].tcph->dest = htons(buf_entry->dport);
+				else
+					th_info[0].tcph->dest = htons(dst_port);
+
 				th_info[0].tcph->seq = htonl(buf_entry->seq);
 				th_info[0].tcph->ack_seq = htonl(0);
 				th_info[0].tcph->doff = (TCP_HEADER_LEN + optlen) >> 2;

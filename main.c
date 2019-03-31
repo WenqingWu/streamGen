@@ -56,6 +56,10 @@ int         mode_run = 1;
 int         len_cut = 5;
 bool 		is_len_fixed = false;
 bool 		syn_flood_set = false;
+bool 		dst_port_fixed = false;
+uint16_t	dst_port;
+bool 		get_dst_from_file = false;
+char		dst_addr_file[20];
 
 #define S_TO_TSC(t) rte_get_tsc_hz() * (t)
 /* delay for 't' seconds */
@@ -461,6 +465,10 @@ print_usage(const char * prgname)
 		"\t\tTime interval for displaying statistics information.(default 2 for 2s)\n"
         "\t-b BURST: \n"
         "\t\tTransmiting burst while sending with DPDK (default 1, maximum 128)\n"
+		"\t-d DEST_PORT: \n"
+		"\t\t Give a fixed dest_port for SYN Flooding.\n"
+		"\t-f FILE NAME: \n"
+		"\t\t File which contains dest IP address and dest MAC address.\n"
         "\t-m RUNNING MODE:\n"
         "\t\t1, Normal Sending mode\n"
         "\t\t2, Simulating SYN flood\n\n",
@@ -473,7 +481,7 @@ get_options(int argc, char *argv[])
 {
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "hi:o:m:b:c:l:t:T:")) != -1) {
+    while ((opt = getopt(argc, argv, "hi:o:m:b:c:d:f:l:t:T:")) != -1) {
         switch(opt) {
             case 'h':
                 print_usage(argv[0]);
@@ -487,6 +495,14 @@ get_options(int argc, char *argv[])
               	break;
             case 'c':
               	nb_concur = atoi(optarg);
+              	break;
+            case 'd':
+              	dst_port = atoi(optarg);
+				dst_port_fixed = true;
+              	break;
+            case 'f':
+              	strcpy(dst_addr_file, optarg);
+				get_dst_from_file = true;
               	break;
             case 'b':
               	burst = (uint16_t)atoi(optarg);
