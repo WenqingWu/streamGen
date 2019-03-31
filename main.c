@@ -55,6 +55,7 @@ int         nb_snd_thread = 1;
 int         mode_run = 1;
 int         len_cut = 5;
 bool 		is_len_fixed = false;
+bool 		syn_flood_set = false;
 
 #define S_TO_TSC(t) rte_get_tsc_hz() * (t)
 /* delay for 't' seconds */
@@ -80,7 +81,7 @@ print_final_stat(void)
 {
 	struct rte_eth_stats stats_end;
 
-    printf("\n\n\n++++++ Accumulated Statistics for streamGen +++++\n");
+    printf("\n\n\n++++++ Accumulated Statistics for streamGen ++++++\n");
     
 	int i;
     uint64_t tx_total = 0, drop_total = 0;
@@ -574,6 +575,8 @@ main (int argc, char *argv[])
         exit(1);
 	}
 
+	if (mode_run == 2) 
+		syn_flood_set = true;
 	init_hash_buf();
     nb_stream = 0;
     

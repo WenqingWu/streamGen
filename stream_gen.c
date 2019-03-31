@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <time.h>
 
+#include <rte_ether.h>
+
 #include "include/stream_gen.h"
 #include "include/tcp_header.h"
 #include "libnids-1.24/src/nids.h"
@@ -16,8 +18,8 @@ static int                  concur_per_thread;
 char src_ip_addr[16];  //IPv4 address	
 char dst_ip_addr[16];
 
-uint8_t src_mac[6] = {0x90, 0xe2, 0xba, 0x13, 0x08, 0xb0}; //b0
-uint8_t dst_mac[6] = {0x90, 0xe2, 0xba, 0x16, 0x1a, 0xb1}; //b1
+uint8_t src_mac[6] = {0x90, 0xe2, 0xba, 0x14, 0xbe, 0xae}; //b0
+uint8_t dst_mac[6] = {0x00, 0x30, 0x48, 0xf7, 0xc3, 0x4a}; //b1
 
 
 #define US_TO_TSC(t) ((rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S ) * (t)
@@ -134,8 +136,11 @@ set_field(struct buf_node* node)
 	sprintf(dst_ip_addr, "10.1.%u.%u", adr_4, adr_3);	
 
     node->saddr = inet_addr(src_ip_addr);
-    node->daddr = inet_addr(dst_ip_addr);
-
+	if (syn_flood_set) {
+		node->daddr = inet_addr("10.10.0.113");
+	} else {
+		node->daddr = inet_addr(dst_ip_addr);
+	}
 	node->sport = (uint16_t) libnet_get_prand(LIBNET_PRu16);
 	if (node->sport <= 1024) node->sport += 1024; // skip reserved port numbers
 
@@ -170,8 +175,17 @@ prepare_header(int id)
 
     for (i = 0; i < 6; i++) {
         th_info[id].pkt[i] = dst_mac[i];
-        th_info[id].pkt[i + 6] = src_mac[i];
     }   
+	
+	if (syn_flood_set) {
+	// While simulating SYN flooding, set packets' source MAC address with MAC address of snd_port
+		struct ether_addr port_addr;
+		rte_eth_macaddr_get(snd_port, &port_addr);
+		ether_addr_copy(&port_addr, &th_info[id].pkt[6]);
+	} else {
+		for (i = 0; i < 6; i++)
+			th_info[id].pkt[i + 6] = src_mac[i];
+	}
 	eth->h_proto = htons(0x0800); /* IP */
 
     /* set iphdr pointer */
@@ -786,7 +800,11 @@ send_data_pkt(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q, int
 
 	/* Fill in the payload */
 	payload_offset = HEADER_LEN + optlen;
-	memcpy(((uint8_t *)th_info[id].pkt + payload_offset), node->tot_buf + node->offset, length);
+
+	/* debug */
+	if (rest_len < 0)
+		fprintf(stderr, "%d %d %d %d\n", length, node->len, node->offset, rest_len);
+	memcpy(((uint8_t *)th_info[id].pkt + payload_offset), ((uint8_t *)node->tot_buf + node->offset), length);
     /* update data offset */
     node->offset += length;
     /* update header fields */
@@ -1183,15 +1201,14 @@ send_loop(void* args)
         /* Sending 'concur_per_thread' packets */
         for (i = th_id ; i < nb_stream; i+= nb_snd_thread) {
             /* skip packets with small payload */
-#if 0
+			#if 0
             if (is_len_fixed && th_info[th_id].nodes[i]->len < len_cut){
                 continue;
             }
-#endif
+			#endif
             /* Keep sending several packets of a stream */
             n_snd = rand() % 3 + 1;         // 1 ~ 3
             while (n_snd--) {
-                /* TODO: modify delivered queue number for multi-threading mode */
 				if (th_info[th_id].nodes[i]->state == TCP_ST_FIN_SENT_2) {
 					send_packet(th_info[th_id].nodes[i], n_part, snd_port, th_id, th_id);
 					break;

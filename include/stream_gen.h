@@ -99,6 +99,7 @@ extern int      		len_cut;
 extern bool     		is_len_fixed;
 extern int              snd_port;
 extern uint16_t         burst;
+extern bool 			syn_flood_set;
 
 extern volatile bool    force_quit;
 extern int      		nb_stream;  // number of streams stored in buffer 
