@@ -65,10 +65,10 @@ bool 		is_len_fixed = false;
 bool        syn_flood_set = false;
 int			mode_run = 1; // 1 for normal stream generator, 2 for syn flood simulator
 volatile bool force_quit;
+char        dev[20] = "eth0";    // network interface for sending packets
 
 
 #ifdef USE_PCAP
-char        dev[20] = "eth0";    // network interface for sending packets
 char        error[LIBNET_ERRBUF_SIZE];
 pcap_t     *pcap_hdl;
 #endif

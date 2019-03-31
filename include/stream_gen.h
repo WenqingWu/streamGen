@@ -96,7 +96,6 @@ extern volatile bool    force_quit;
 extern char 	dev[20];
 
 #ifdef USE_PCAP
-extern char     dev[20];  
 extern char     error[LIBNET_ERRBUF_SIZE];
 extern pcap_t*  pcap_hdl;
 #endif
