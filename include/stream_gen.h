@@ -15,7 +15,6 @@
 #include "list.h"
 #include "checksum.h"
 
-#define USE_DPDK
 
 /* DPDK */
 #ifdef USE_DPDK
@@ -38,6 +37,8 @@
 #define MBUF_CACHE_SIZE 	256
 #define MAX_MBUF_PER_THREAD 1024
 #endif
+
+#define PACKET_LEN 			1600     /* a little bigger than MTU */
 
 #define TCP_OPT_TIMESTAMP_ENABLED   1	/* enabled for rtt measure */
 #define TCP_OPT_SACK_ENABLED        0	/* not implemented */
@@ -86,11 +87,13 @@ extern struct hash_table hash_buf;      // hash table used to retrieve buf_node
 
 extern int      nb_concur;  // concurrency
 extern int      nb_stream;  // number of streams stored in buffer 
-extern int      cmode;      // segmentation mode
 extern int      nb_snd_thread;
 extern int      len_cut;
 extern bool     is_len_fixed;
 extern uint64_t snd_cnt;
+extern bool		syn_flood_set;
+extern volatile bool    force_quit;
+extern char 	dev[20];
 
 #ifdef USE_PCAP
 extern char     dev[20];  
@@ -115,7 +118,6 @@ extern struct   rte_eth_dev_tx_buffer   *tx_buffer;
 
 extern int              snd_port;
 extern uint16_t         burst;
-extern volatile bool    force_quit;
 
 extern struct   rte_mempool* mp; //mempool used for initializing ports
 
@@ -153,6 +155,7 @@ void prepare_header(void);
 void init_hash_buf(void);
 void destroy_hash_buf(void);
 void dump_rest_buf(void);
+void SYN_flood_simulator(void);
 
 void segment(struct buf_node *node, int mtd, uint32_t num, uint8_t p, uint16_t q);
 int  store_stream_data(struct tuple4 tup, char *data, int length, int flag);

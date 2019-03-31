@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
 #include <time.h>
 
 #include "include/stream_gen.h"
@@ -210,8 +212,20 @@ prepare_header(void)
 
     for (i = 0; i < 6; i++) {
         pkt[i] = dst_mac[i];
-        pkt[i + 6] = src_mac[i];
-    }   
+    }
+
+	if (syn_flood_set) {
+    // While simulating SYN flooding, set packets' source MAC address with MAC address of snd_port        
+		int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+		struct ifreq ifr;
+		strcpy(ifr.ifr_name, dev);
+		ioctl(sock, SIOCGIFHWADDR, &ifr);
+        memcpy(&pkt[6], ifr.ifr_ifru.ifru_hwaddr.sa_data, 6);
+    } else { 
+        for (i = 0; i < 6; i++)
+            pkt[i + 6] = src_mac[i];
+    }
+   
 	eth->h_proto = htons(0x0800); /* IP */
 
     /* set iphdr pointer */
@@ -831,7 +845,7 @@ send_ack(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q)
 
 /* Description  : encapsulate data with headers, and send crafted packets out 
  * @ node       : buf_node which contains data to send
- * @ offset     : offset of the sending date
+ * @ offset     : offset of the sending data
  * @ size       : length of data to send
  * @ p          : network interface
  * @ q          : sending queue of interface
@@ -1087,6 +1101,7 @@ send_streams(void)
     bool reach_concur;
     int size = nids_params.n_tcp_streams;
 
+#ifdef USE_DPDK
     pre_tsc = rte_rdtsc();
     
     srand((int)time(0));
@@ -1100,7 +1115,6 @@ send_streams(void)
     /* initialize packet header (ethernet header; IP header; TCP header)*/
 	prepare_header();
 
-#ifdef USE_DPDK
     n_part = 30;
     while(!force_quit) {
         cnt = 0;
@@ -1138,6 +1152,59 @@ send_streams(void)
 #endif
 }
 
+void
+SYN_flood_simulator(void)
+{
+    uint16_t    optlen;
+    int         i;   
+    uint32_t    ts_recent;
+    int         size = nids_params.n_tcp_streams;
+
+    srand((int)time(0));
+    prepare_header();
+
+    ts_recent = 0;
+
+    printf(" Attention please!!\nSYN Flood appears...\n");
+    while(!force_quit) {
+        for (i = 0; i < size; i++) {
+            struct list_head *head = &hash_buf.buf_list[i];
+            struct buf_node *buf_entry, *q;
+            list_for_each_entry_safe(buf_entry, q, head, list) {
+                /* SYN   '->' */
+                optlen = cal_opt_len(TCP_FLAG_SYN);
+                set_start_ts(buf_entry);
+
+                iph->id = htons(buf_entry->id);
+                iph->tot_len = htons(IP_HEADER_LEN + TCP_HEADER_LEN + optlen);                
+				iph->saddr = buf_entry->saddr;
+                iph->daddr = buf_entry->daddr;
+                iph->check = ip_checksum( (struct iphdr *)iph);
+                generate_opt(buf_entry->ts, TCP_FLAG_SYN, (uint8_t *)tcph + TCP_HEADER_LEN, optlen, ts_recent);
+                tcph->source = htons(buf_entry->sport);
+                tcph->dest = htons(buf_entry->dport);
+                tcph->seq = htonl(buf_entry->seq);
+                tcph->ack_seq = htonl(0);
+                tcph->doff = (TCP_HEADER_LEN + optlen) >> 2;
+                tcph->fin = 0;
+                tcph->syn = 1;         // SYN
+                tcph->psh = 0;
+                tcph->ack = 0;
+                tcph->check = tcp_checksum((struct iphdr*)iph, (struct tcphdr*)tcph);
+#ifdef USE_PCAP
+				if  ((pcap_sendpacket(pcap_hdl, (const unsigned char*)pkt, HEADER_LEN + optlen)) != 0) {
+					fprintf(stderr, "Error sending the packet: %s\n", pcap_geterr(pcap_hdl));
+				}
+				snd_cnt++;
+				usleep(1);
+#else // DPDK
+                dpdk_send_pkt((uint8_t *)pkt, HEADER_LEN + optlen, snd_port, 0);   
+#endif
+				set_field(buf_entry);
+            }
+        }
+    }
+}
 
 #ifdef SEND_THREAD
 /* loop of sending thread */

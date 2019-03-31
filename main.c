@@ -38,7 +38,6 @@ struct rte_eth_stats stats_start;
 int stat_interval = 2;
 pthread_t 		stat_id;
 #endif
-volatile bool force_quit;
 
 #ifdef SEND_THREAD
 struct thread_info              th_info[NUM_SEND_THREAD];
@@ -63,6 +62,11 @@ int         nb_snd_thread = 2;
 int         cmode = 1;
 int         len_cut = 5;
 bool 		is_len_fixed = false;
+bool        syn_flood_set = false;
+int			mode_run = 1; // 1 for normal stream generator, 2 for syn flood simulator
+volatile bool force_quit;
+
+
 #ifdef USE_PCAP
 char        dev[20] = "eth0";    // network interface for sending packets
 char        error[LIBNET_ERRBUF_SIZE];
@@ -91,11 +95,11 @@ time_delay(int t)
 static void
 print_final_stat(void)
 {
-	struct rte_eth_stats stats_end;
-	rte_eth_stats_get(snd_port, &stats_end);
 
     printf("\n\n\n+++++ Accumulated Statistics for streamGen +++++\n");
 #ifdef USE_DPDK
+	struct rte_eth_stats stats_end;
+	rte_eth_stats_get(snd_port, &stats_end);
 #ifdef SEND_THREAD
     int i;
     uint64_t tx_total = 0, drop_total = 0;
@@ -121,7 +125,7 @@ print_final_stat(void)
     printf("  TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
 #endif
 #else
-    printf("  TX-packets:\t\t\t%"PRIu64"\n", snd_cnt);
+    printf("  TX-packets:\t\t\t%llu\n", snd_cnt);
 #endif
     printf("++++++++++++++++++++++++++++++++++++++++++++++++\n");
 }
@@ -131,10 +135,7 @@ static void
 signal_handler(int signum)
 {
     if (signum == SIGINT || signum == SIGTERM) {
-
-#ifdef USE_DPDK
         force_quit = true;
-#endif
 
 #ifdef STAT_THREAD
 		pthread_join(stat_id, NULL);
@@ -476,6 +477,7 @@ lcore_main(void)
 	/* wait sending thread */
     wait_threads();
 #else
+
 #ifdef STAT_THREAD
 	/* start statistics thread */
 	pthread_attr_init(&attr);
@@ -488,8 +490,14 @@ lcore_main(void)
 		exit(1);
 	}
 #endif
-    /* send streams concurrently */
-    send_streams();
+	if (mode_run == 1) {
+		/* send streams concurrently */
+		send_streams();
+	} else if (mode_run == 2){
+		SYN_flood_simulator();
+	} else {
+		fprintf(stderr, "Error, please give a right running mode \n(1 for stream generator, 2 for SYN flood simulator.)\n");
+	}
 #endif
 }
 
@@ -556,7 +564,7 @@ get_options(int argc, char *argv[])
 #endif
               	break;
             case 'm':
-              	cmode = atoi(optarg);
+              	mode_run = atoi(optarg);
               	break;
             case 't':
               	nb_snd_thread = atoi(optarg);
@@ -624,6 +632,9 @@ main (int argc, char *argv[])
 		fprintf(stderr, "get options failed,Invalid arguments.\n");
         exit(1);
 	}
+	
+	if (mode_run == 2) 
+		syn_flood_set = true;
 
 	init_hash_buf();
     snd_cnt = 0;
@@ -647,6 +658,8 @@ main (int argc, char *argv[])
     /* Initialize all ports. */
     if (port_init(snd_port, mp) != 0)
         rte_exit(EXIT_FAILURE, "Cannot init port 0\n");
+	
+	rte_eth_stats_get(snd_port, &stats_start);
 #endif //USE_DPDK
 
 #ifdef USE_PCAP
@@ -659,21 +672,22 @@ main (int argc, char *argv[])
         fprintf(stderr, "Could not open %s, error: %s\n", dev, error);
         exit(1);
     }
+	printf("Sending with interface %s\n", dev);
 #endif
 
 	if (!nids_init ()) {
 		fprintf(stderr,"error, %s\n",nids_errbuf);
 		goto outdoor;
 	}
-	
-	rte_eth_stats_get(snd_port, &stats_start);
 
 	nids_register_tcp (tcp_callback);
+	/* main stream generation loop */
     lcore_main(); 
 	
 #ifdef SEND_THREAD
     destroy_threads();
 #endif
+
 #ifdef STAT_THREAD
 	pthread_cancel(stat_id);
 #endif
