@@ -16,7 +16,7 @@ stream generator
 
 ### Dependency
 
-libpcap libnet libnids numa-devel 
+Intel-DPDK libpcap libnet libnids numa-devel 
 
 ### Build
 
@@ -39,16 +39,17 @@ $ make
 $ make install
 $ cd ..
 $ make
+Binary file will be generated in build/
 ```
 
 ### Run
 
-You may run "./build/app/streamGen -c 0x1 -n 1 -- -h" for help information.
+You may run "sudo ./build/streamGen -c 0x1 -n 1 -- -h" for help information.
 
 To start streamGen, you need to give a pcap file as input, for example,
 
 ```bash
-$ ./build/app/streamGen -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000
+$ sudo ./build/streamGen -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000
 ```
 
 ```bash
@@ -70,6 +71,13 @@ $ ./build/app/streamGen -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000
 ```bash
 $ ./build/streamGen -c 0x1 -n 1 -- -i pcapfils/xx.pcap -o 0 -m 2
 (-m : Running mode, default 1 for normal stream generation mode. 2 is given here for simulating SYN flood)
+```
+### To dump stream data in seperate files 
+
+```bash
+1. Uncomment "#LIBS_CFLAGS += -DDUMP_PAYLOAD" and "#LIBS_CFLAGS += -DONLY_REQUEST " in Makefile
+2. Rebuild and Run 
+3. Stream data will dumped in files/ 
 ```
 
 
