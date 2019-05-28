@@ -124,6 +124,13 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q, int id)
 static inline void 
 set_field(struct buf_node* node)
 {
+#ifdef DUMP_PAYLOAD
+    node->saddr = node->tup.saddr;
+    node->daddr = node->tup.daddr;
+    node->sport = node->tup.source;
+    node->dport = node->tup.dest;
+	//printf("%u:%u, %u:%u\n", node->tup.saddr, node->tup.source, node->tup.daddr,node->tup.dest);
+#else
     uint8_t adr_3 = (uint8_t) libnet_get_prand(LIBNET_PR8); /*  0~255 */
 	uint8_t adr_4 = (uint8_t) libnet_get_prand(LIBNET_PR8); /*  0~255 */
 
@@ -135,6 +142,7 @@ set_field(struct buf_node* node)
 
 	node->sport = (uint16_t) libnet_get_prand(LIBNET_PRu16);
 	node->dport = (uint16_t) libnet_get_prand(LIBNET_PRu16);
+#endif
 
 	node->id = (uint16_t) (libnet_get_prand(LIBNET_PR16) % 32768);
     node->rcv_id = 0;
@@ -566,6 +574,12 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
 
         dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
         
+#ifdef DUMP_PAYLOAD
+        list_delete_entry(&node->list);
+        free(node);
+        return;
+#endif
+
         /* reset header fields */
         set_field(node);
 		/* To cover as many stream data as possible, 
@@ -578,8 +592,8 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         list_delete_entry(&node->list);
         /* Used randomly generated tuple4(initialized in insert_buf_node()), or rand() % size */ 
         struct tuple4 tup;
-        tup.saddr = node->saddr;
-        tup.daddr = node->daddr;
+        tup.saddr = ntohl(node->saddr);
+        tup.daddr = ntohl(node->daddr);
         tup.source = node->sport;
         tup.dest = node->dport;
 		struct list_head *buf_list_t = &hash_buf.buf_list[hash_index(tup)];
@@ -937,7 +951,6 @@ copy_stream_data(int nb_copy)
         }
     }
 }
-
 /* Count number of streams held in hash buffer */
 static int
 counter (void)
@@ -945,10 +958,40 @@ counter (void)
     int i;
     int cnt = 0;
     int size = nids_params.n_tcp_streams;
+#ifdef DUMP_PAYLOAD
+    system("rm -rf files/*");
+#endif
+
     for (i = 0; i < size; i++) {
         struct list_head *head = &hash_buf.buf_list[i];
         struct buf_node *buf_entry;
         list_for_each_entry(buf_entry, head, list) {
+#ifdef DUMP_PAYLOAD
+            char file_name[30];
+            char tup_str[50];
+			char src_addr[10];
+			char dst_addr[10];
+            struct in_addr addr_s, addr_d;
+
+			addr_s.s_addr = buf_entry->saddr;
+			addr_d.s_addr = buf_entry->daddr;
+
+			strcpy(src_addr, inet_ntoa(addr_s));
+			strcpy(dst_addr, inet_ntoa(addr_d));
+
+			sprintf(tup_str, "%s:%d-%s:%d", 
+                    src_addr, buf_entry->sport,     
+                    dst_addr, buf_entry->dport);
+            sprintf(file_name, "files/file_%s", tup_str);
+            FILE *file_fd = fopen(file_name, "wb+");
+            if (!file_fd) {
+                perror("fopen");
+                return;
+            }    
+            //fputs((const char *)tup_str, file_fd);
+            fputs((const char *)(buf_entry->tot_buf), file_fd);
+            fclose(file_fd);
+#endif
             cnt++;
         }
     }
@@ -1094,7 +1137,7 @@ send_streams(void)
     /* initialize packet header (ethernet header; IP header; TCP header)*/
 	prepare_header(0);
 
-    n_part = 30;
+    n_part = 25 + rand() % 10;
     while(!force_quit) {
         cnt = 0;
         reach_concur = false;

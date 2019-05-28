@@ -237,6 +237,9 @@ tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)
          * see "if...else..." for details.
          * */
 		if (a_tcp->client.count_new) {
+#ifdef ONLY_REQUEST
+            return;
+#endif
 			/* new data for client */
 			tp4 = a_tcp->addr;
 			
