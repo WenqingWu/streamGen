@@ -18,7 +18,6 @@ See the file COPYING for license details.
 
 #include "include/stream_gen.h"
 
-#ifdef USE_DPDK
 #include <inttypes.h>
 #include <rte_eal.h>
 #include <rte_cycles.h>
@@ -38,44 +37,29 @@ struct rte_eth_stats stats_start;
 int stat_interval = 2;
 pthread_t 		stat_id;
 #endif
+volatile bool force_quit;
 
-#ifdef SEND_THREAD
 struct thread_info              th_info[NUM_SEND_THREAD];
-#else
-struct mbuf_table               tx_mbufs;
-struct dpdk_port_statistics     port_stat = {0};
-#endif
+
 int                             snd_port = 0;
 uint16_t                        burst = DEFAULT_BURST_SIZE;           // tx burst, default 64
 struct rte_mempool*             mp;
-struct rte_eth_dev_tx_buffer*   tx_buffer;
-#endif //USE_DPDK
 
 #define int_ntoa(x)	inet_ntoa(*((struct in_addr *)&x))
 
 struct hash_table               hash_buf;          //hash table
 int         nb_stream;
-uint64_t    snd_cnt;
 /* commandline arguments */
 int         nb_concur = 10;
-int         nb_snd_thread = 2;
-int         cmode = 1;
+int         nb_snd_thread = 1;
+int         mode_run = 1;
 int         len_cut = 5;
 bool 		is_len_fixed = false;
-bool        syn_flood_set = false;
-int			mode_run = 1; // 1 for normal stream generator, 2 for syn flood simulator
-char        dev[20] = "eth0";    // network interface for sending packets
-bool        dst_port_fixed = false;
-uint16_t    dst_port;
-bool        get_dst_from_file = false;
-char        dst_addr_file[20];
-
-volatile bool force_quit;
-
-#ifdef USE_PCAP
-char        error[LIBNET_ERRBUF_SIZE];
-pcap_t     *pcap_hdl;
-#endif
+bool 		syn_flood_set = false;
+bool 		dst_port_fixed = false;
+uint16_t	dst_port;
+bool 		get_dst_from_file = false;
+char		dst_addr_file[20];
 
 #define S_TO_TSC(t) rte_get_tsc_hz() * (t)
 /* delay for 't' seconds */
@@ -99,39 +83,27 @@ time_delay(int t)
 static void
 print_final_stat(void)
 {
-
-    printf("\n\n\n+++++ Accumulated Statistics for streamGen +++++\n");
-#ifdef USE_DPDK
 	struct rte_eth_stats stats_end;
-	rte_eth_stats_get(snd_port, &stats_end);
-#ifdef SEND_THREAD
-    int i;
+
+    printf("\n\n\n++++++ Accumulated Statistics for streamGen ++++++\n");
+    
+	int i;
     uint64_t tx_total = 0, drop_total = 0;
     for (i = 0; i < nb_snd_thread; ++i) {
         tx_total += th_info[i].stats.tx;
         drop_total += th_info[i].stats.dropped;
     }   
 
-	printf("---------- Statistics from application ---------\n");
-    printf("  TX-packets:\t\t\t%"PRIu64"\n", tx_total);
-    printf("  TX-dropped:\t\t\t%"PRIu64"\n", drop_total);
-    printf("------------- Statistics from NICs -------------\n");
-    printf("  TX-packets:\t\t\t%"PRIu64"\n", stats_end.opackets - stats_start.opackets);
-    printf("  TX-bytes:\t\t\t%"PRIu64"\n", stats_end.obytes - stats_start.obytes);
-    printf("  TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
-#else
-	printf("---------- Statistics from application ---------\n");
-    printf("  TX-packets:\t\t\t%"PRIu64"\n", port_stat.tx);
-    printf("  TX-dropped:\t\t\t%"PRIu64"\n", port_stat.dropped);
-    printf("------------- Statistics from NICs -------------\n");
-    printf("  TX-packets:\t\t\t%"PRIu64"\n",stats_end.opackets - stats_start.opackets);
-    printf("  TX-bytes:\t\t\t%"PRIu64"\n", stats_end.obytes - stats_start.obytes);
-    printf("  TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
-#endif
-#else
-    printf("  TX-packets:\t\t\t%llu\n", snd_cnt);
-#endif
-    printf("++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	rte_eth_stats_get(snd_port, &stats_end);
+
+	printf("----------- Statistics from application ----------\n");
+    printf("   TX-packets:\t\t\t%"PRIu64"\n", tx_total);
+    printf("   TX-dropped:\t\t\t%"PRIu64"\n", drop_total);
+    printf("-------------- Statistics from NICs --------------\n");
+    printf("   TX-packets:\t\t\t%"PRIu64"\n", stats_end.opackets - stats_start.opackets);
+    printf("   TX-bytes:\t\t\t%"PRIu64"\n", stats_end.obytes - stats_start.obytes);
+    printf("   TX-errors:\t\t\t%"PRIu64"\n", stats_end.oerrors - stats_start.oerrors);
+    printf("++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 }
 
 
@@ -139,6 +111,7 @@ static void
 signal_handler(int signum)
 {
     if (signum == SIGINT || signum == SIGTERM) {
+
         force_quit = true;
 
 #ifdef STAT_THREAD
@@ -150,15 +123,13 @@ signal_handler(int signum)
 		rte_pdump_uninit();
 #endif
 
-#ifdef USE_PCAP
-        pcap_close(pcap_hdl);
-#endif
-
 #ifdef SEND_THREAD
-        wait_threads();
-#endif
+		wait_threads();
+		destroy_data_per_thread();
+#else
         /* free hash table */
         destroy_hash_buf();
+#endif
         
         /* print statistics */
         print_final_stat();
@@ -168,7 +139,6 @@ signal_handler(int signum)
 		kill(getpid(), signum);
     }   
 }
-
 
 /* struct tuple4 contains addresses and port numbers of the TCP connections
  * the following auxiliary function produces a string looking like
@@ -210,16 +180,10 @@ tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)
 		/* if we don't increase this value, we won't be notified of urgent data arrival */
 		a_tcp->client.collect_urg++; 
 #endif
-#ifdef DEBUG_SEGMENTOR
-		fprintf (stderr, "%s established\n", buf);
-#endif
 		return;
 	}
 	if (a_tcp->nids_state == NIDS_CLOSE) {
 		/* connection has been closed normally */
-#ifdef DEBUG_SEGMENTOR
-		fprintf (stderr, "%s closing\n", buf);
-#endif
 		/* TODO, determine in what direction (dual direction for now!!)*/
 		/* same direction  */
 		tp4 = a_tcp->addr;
@@ -235,9 +199,6 @@ tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)
 	}
 	if (a_tcp->nids_state == NIDS_RESET) {
 		/* connection has been closed by RST */
-#ifdef DEBUG_SEGMENTOR
-		fprintf (stderr, "%s reset\n", buf);
-#endif
 		return;
 	}
 
@@ -276,6 +237,9 @@ tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)
          * see "if...else..." for details.
          * */
 		if (a_tcp->client.count_new) {
+#ifdef ONLY_REQUEST
+            return;
+#endif
 			/* new data for client */
 			tp4 = a_tcp->addr;
 			
@@ -297,9 +261,6 @@ tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)
 		/* we print the connection parameters:
 		 * (saddr, daddr, sport, dport) accompanied by data flow direction (-> or <-)
 		 */
-#ifdef DEBUG_SEGMENTOR
-		fprintf(stderr,"%s",buf); 
-#endif
 		/* segment data buffer */
 		store_stream_data(tp4, (char *)hlf->data, hlf->count - hlf->offset, NIDS_DATA);	
 #ifdef DEBUG_SEGMENTOR	
@@ -309,7 +270,6 @@ tcp_callback (struct tcp_stream *a_tcp, void ** this_time_not_needed)
 	return ;
 }
 
-#ifdef USE_DPDK
 /*
  * Initializes a given port using global settings and with the RX buffers
  * coming from the mbuf_pool passed as a parameter.
@@ -357,22 +317,7 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
         if (retval < 0)
             return retval;
     }
-# ifdef TX_BUFFER      /* Note: not used for now!! */
-	/* Initialize TX buffers */
-	tx_buffer = rte_zmalloc_socket("tx_buffer", RTE_ETH_TX_BUFFER_SIZE(burst), 0, rte_eth_dev_socket_id(port));
-    if (tx_buffer == NULL) {
-		printf("Cannot allocate buffer for tx on port %u\n", (unsigned) port);
-        exit(1);
-    }
-	rte_eth_tx_buffer_init(tx_buffer, burst);
 
-	retval = rte_eth_tx_buffer_set_err_callback(tx_buffer,
-			dpdk_tx_buffer_unsent_callback, &port_stat.dropped);
-	if (retval < 0) {
-		printf("Cannot set error callback for tx buffer on port %u\n", (unsigned) port);
-        exit(1);
-    }
-#endif	
     /* Start the Ethernet port. */
     retval = rte_eth_dev_start(port);
     if (retval < 0)
@@ -393,7 +338,6 @@ port_init(uint16_t port, struct rte_mempool *mbuf_pool)
 
     return 0;
 }
-#endif
 
 #ifdef STAT_THREAD
 /* loop for statistics thread */
@@ -427,7 +371,7 @@ stat_loop(void *arg)
 			const char topLeft[] = { 27, '[', '1', ';', '1', 'H','\0' };
 			printf("%s%s", clr, topLeft);
 		
-			printf("NIC Statistics ===================================\n");
+			printf("\nNIC Statistics ===================================\n");
 			printf("Accumulated Statistics from beginning ------------\n");
 			printf("  TX-packets:\t\t\t%"PRIu64"\n", stat_e.opackets - stats_start.opackets);
 			printf("  TX-bytes:\t\t\t%"PRIu64"\n", stat_e.obytes - stats_start.obytes);
@@ -441,7 +385,7 @@ stat_loop(void *arg)
 			
 			stat_s.obytes = stat_e.obytes;
 			stat_s.opackets = stat_e.opackets;
-			printf("==================================================\n");
+			printf("==================================================\n\n");
 		}
 	}
 }
@@ -463,9 +407,8 @@ lcore_main(void)
 	
     printf("\nStart sending packets. [Ctrl+C to quit]\n");
 #ifdef SEND_THREAD
-    /* send streams concurrently with multi-thread*/
-    run_send_threads();
-	
+	/* send streams concurrently with multi-thread*/
+	run_send_threads();
 #ifdef STAT_THREAD
 	/* start statistics thread */
 	pthread_attr_init(&attr);
@@ -479,8 +422,9 @@ lcore_main(void)
 	}
 #endif
 	/* wait sending thread */
-    wait_threads();
-#else
+	wait_threads();
+
+#else  //#ifdef SEND_THREAD
 
 #ifdef STAT_THREAD
 	/* start statistics thread */
@@ -494,13 +438,11 @@ lcore_main(void)
 		exit(1);
 	}
 #endif
-	if (mode_run == 1) {
-		/* send streams concurrently */
-		send_streams();
-	} else if (mode_run == 2){
+	if (mode_run == 1 ){   // Normal stream generation mode
+    	/* send streams concurrently */
+   	 	send_streams();
+	} else {               // Simulating SYN flood
 		SYN_flood_simulator();
-	} else {
-		fprintf(stderr, "Error, please give a right running mode \n(1 for stream generator, 2 for SYN flood simulator.)\n");
 	}
 #endif
 }
@@ -511,12 +453,12 @@ print_usage(const char * prgname)
 {
     printf("Usage: %s [EAL options] -- [options] [input file]\n"
         "\n\t[options]:\n"
-        "\t-h help: display usage infomation\n"
+        "\t-h HELP: Display usage infomation\n"
         "\t-i PCAP FILE:\n"
         "\t\tInput packets which contains network trace\n"
         "\t-o INTERFACE:\n"
-        "\t\tinterface for sending packets\n"
-        "\t\t(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)\n"
+        "\t\tInterface used for sending packets\n"
+        "\t\t(e.g. 1 for port1 with DPDK, default 0)\n"
         "\t-c CONCURRENCY: concurrency of sending streams.(default 10)\n"
         "\t-t THREADS:\n"
         "\t\tNumber of sending threads (default 1, maximum 8)\n"
@@ -526,14 +468,13 @@ print_usage(const char * prgname)
 		"\t\tTime interval for displaying statistics information.(default 2 for 2s)\n"
         "\t-b BURST: \n"
         "\t\tTransmiting burst while sending with DPDK (default 1, maximum 128)\n"
-        "\t-d DEST_PORT: \n"
-        "\t\t Give a fixed dest_port for SYN Flooding.\n"
-        "\t-f FILE NAME: \n"
-        "\t\t File which contains dest IP address and dest MAC address.\n"
-        "\t-m CUT MODE(Not used for now):\n"
-        "\t\t1, equal mode\n"
-        "\t\t2, random mode\n"
-        "\t\t3, overlap mode\n\n",
+		"\t-d DEST_PORT: \n"
+		"\t\t Give a fixed dest_port for SYN Flooding.\n"
+		"\t-f FILE NAME: \n"
+		"\t\t File which contains dest IP address and dest MAC address.\n"
+        "\t-m RUNNING MODE:\n"
+        "\t\t1, Normal Sending mode\n"
+        "\t\t2, Simulating SYN flood\n\n",
         prgname);
 }
 
@@ -553,37 +494,37 @@ get_options(int argc, char *argv[])
                 strcpy(nids_params.filename, optarg);
                 break;
             case 'o':
-#ifdef USE_PCAP
-              	strcpy(dev, (const char *)optarg);
-#else
                 snd_port = atoi(optarg);
-#endif
               	break;
             case 'c':
               	nb_concur = atoi(optarg);
               	break;
             case 'd':
-                dst_port = atoi(optarg);
-                dst_port_fixed = true;
-                break;
+              	dst_port = atoi(optarg);
+				dst_port_fixed = true;
+              	break;
             case 'f':
-                strcpy(dst_addr_file, optarg);
-                get_dst_from_file = true;
-                break;
+              	strcpy(dst_addr_file, optarg);
+				get_dst_from_file = true;
+              	break;
             case 'b':
-#ifdef USE_DPDK
               	burst = (uint16_t)atoi(optarg);
-                if (burst >= MAX_BURST) {
-                    printf("Burst number exceed MAX_BURST(128).\n");
-                    exit(1);
+                if (burst < 1 || burst >= MAX_BURST) {
+                    rte_exit(EXIT_FAILURE, "\nInvalid burst.(1 ~ %d).\n", MAX_BURST);
                 }
-#endif
               	break;
             case 'm':
               	mode_run = atoi(optarg);
+                if (mode_run < 1 || mode_run > 2) {
+                    printf("\nInvalid running mode.(2 modes supported for now.)\n");
+					exit(1);
+                }
               	break;
             case 't':
               	nb_snd_thread = atoi(optarg);
+				if (nb_snd_thread < 1 || nb_snd_thread > NUM_SEND_THREAD) {
+					rte_exit(EXIT_FAILURE, "\nInvalid number of thread.(1 ~ %d)\n", NUM_SEND_THREAD);
+				}
               	break;
 #ifdef STAT_THREAD
             case 'T':
@@ -593,6 +534,12 @@ get_options(int argc, char *argv[])
             case 'l':
               	len_cut = atoi(optarg);
 				is_len_fixed = true;
+				if (len_cut < 0) {
+					rte_exit(EXIT_FAILURE, "\nInvalid length of payload.\n");
+				}
+				if (len_cut > MAX_SEG_SIZE) {
+					printf("\nWarning, length of payload exceeds maximum segment size, will be replaced by MSS.\n");
+				}
               	break;
 	        default:
 				print_usage(argv[0]);	
@@ -609,14 +556,13 @@ main (int argc, char *argv[])
 {
     int ret;
     int i;
-#ifdef USE_DPDK
     //struct rte_mempool *mbuf_pool;
     unsigned nb_ports;
     //uint16_t portid;
 
 	ret = rte_eal_init(argc, argv);
 	if (ret < 0) {
-		rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
+		rte_exit(EXIT_FAILURE, "\nError with EAL initialization\n");
 	}
 
     argc -= ret;
@@ -629,8 +575,7 @@ main (int argc, char *argv[])
 	rte_pdump_init(NULL);
     printf ("pdump server initialized.\n");
 #endif
-
-#endif
+	
 	signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
@@ -638,89 +583,74 @@ main (int argc, char *argv[])
 	 * nids_params.n_hosts=256;
 	 */
 	if(argc < 3) {
-		fprintf(stderr, "start failed, too few arguments for commandline. \n\n");
+		fprintf(stderr, "\nStart-up failed, too few arguments for commandline. \n\n");
 		print_usage(argv[0]);
 		exit(1);
 	}
 	
 	ret = get_options(argc, argv);
 	if (ret < 0 ) {
-		fprintf(stderr, "get options failed,Invalid arguments.\n");
+		fprintf(stderr, "\nFailed to parse options, Invalid arguments.\n");
         exit(1);
 	}
-	
+
 	if (mode_run == 2) 
 		syn_flood_set = true;
-
 	init_hash_buf();
-    snd_cnt = 0;
     nb_stream = 0;
     
-#ifdef USE_DPDK
     /* number of ports */
 	nb_ports = rte_eth_dev_count();
-    printf("nb_port:%d\n", nb_ports);
+    printf("\nNumber of Network Ports Available:%d\n", nb_ports);
 	if (nb_ports <= 0) {
 		rte_exit(EXIT_FAILURE, "Error: no ports available\n");
+	} else if (snd_port >= nb_ports){
+		rte_exit(EXIT_FAILURE, "Error: Specified port %d is invalid.\n", snd_port);
 	}
 
-    printf("NUMA info, socket id: %d, port 0 socket id: %d\n", rte_socket_id(), rte_eth_dev_socket_id(0));
+    printf("NUMA info, socket id: %d, socket id for network device: %d\n", rte_socket_id(), rte_eth_dev_socket_id(0));
 	/* Creates a new mempool in memory to hold the mbufs. */
     mp = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS * nb_ports,
         MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
     if (mp == NULL)
-        rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
+        rte_exit(EXIT_FAILURE, "\nCannot create mbuf pool\n");
 
     /* Initialize all ports. */
     if (port_init(snd_port, mp) != 0)
-        rte_exit(EXIT_FAILURE, "Cannot init port 0\n");
-	
-	rte_eth_stats_get(snd_port, &stats_start);
-#endif //USE_DPDK
-
-#ifdef USE_PCAP
-    /* Open the adapter */
-    if ((pcap_hdl = pcap_open_live(dev,   /* name of the interface(device) */
-                    65535,                          /* portion of the packet to capture */
-                    1,                              /* promiscuous mode (nonzero means promiscuous) */
-                    1000,                           /* read timeout */
-                    error)) == NULL) {
-        fprintf(stderr, "Could not open %s, error: %s\n", dev, error);
-        exit(1);
-    }
-	printf("Sending with interface %s\n", dev);
-#endif
+        rte_exit(EXIT_FAILURE, "\nCannot init port 0\n");
 
 	if (!nids_init ()) {
 		fprintf(stderr,"error, %s\n",nids_errbuf);
 		goto outdoor;
 	}
+	
+	rte_eth_stats_get(snd_port, &stats_start);
 
 	nids_register_tcp (tcp_callback);
-	/* main stream generation loop */
-    lcore_main(); 
+    /* main stream generation loop */
+	lcore_main(); 
 	
 #ifdef SEND_THREAD
-    destroy_threads();
+	destroy_threads();
+	destroy_data_per_thread();
 #endif
 
 #ifdef STAT_THREAD
 	pthread_cancel(stat_id);
 #endif
-#ifdef USE_DPDK
 	/* sent out or drop rest data remains in hash table,
 	 * and free hash table 
 	 * */
     dpdk_tx_flush();
-#endif
     print_final_stat();
 
 outdoor:
     printf("finishing ...\n");
+
+#ifndef SEND_THREAD
 	destroy_hash_buf();
-#ifdef USE_PCAP
-	pcap_close(pcap_hdl);
 #endif
+
 	return 0;
 }
 
