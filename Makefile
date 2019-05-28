@@ -62,6 +62,7 @@ LNET_CFLAGS = -I/usr/local/include
 LNETLIB     = -lnet
 
 LIBS_CFLAGS = -Ilibnids-1.24/src -Iinclude  $(PCAP_CFLAGS) $(LNET_CFLAGS) 
+# LIBS_CFLAGS += -DUSE_PCAP
 # LIBS_CFLAGS += -DUSE_DPDK
 # LIBS_CFLAGS += -DUSE_PDUMP
 LIBS_CFLAGS += -DSTAT_THREAD
