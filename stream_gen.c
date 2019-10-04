@@ -811,8 +811,10 @@ send_data_pkt(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q, int
     node->seq += length;
 
     dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen + length, p, q, id);
+#ifndef NO_ACK
     /* send correspond ACK */
-	send_ack(node, p, q, id);
+    send_ack(node, p, q, id);
+#endif
 }
 
 /* Description: cache total data of streams, where data for the same stream will be stored in the same buffer
