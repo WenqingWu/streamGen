@@ -42,6 +42,26 @@ burst_delay(uint16_t t, int id)
     th_info[id].pre_tsc = cur_tsc;
 }
 
+#ifdef OOO_SEND
+/* Shuffle for out-of-order support 
+ * */
+static void
+shuffle_mbufs(int id)
+{
+    int size = th_info[id].tx_mbufs.len;
+    int i, t;
+    struct rte_mbuf *tmp;
+    struct rte_mbuf **mbufs = th_info[id].tx_mbufs.m_table;
+
+    for (i = 0; i < size; ++i) {
+        t = rand() % size;
+        tmp = mbufs[t];
+        mbufs[t] = mbufs[i];
+        mbufs[i] = tmp; 
+    }    
+}
+#endif
+
 /* *
  * Description  : transmit packet with DPDK tx burst
  * */
@@ -51,7 +71,9 @@ dpdk_send_burst(uint8_t p, uint16_t q, int id)
     uint32_t nb_tx, cnt, retry;
 
     cnt = th_info[id].tx_mbufs.len;
-
+#ifdef OOO_SEND
+    shuffle_mbufs(id);
+#endif
     nb_tx = rte_eth_tx_burst(p, q, th_info[id].tx_mbufs.m_table, cnt);  //tx_rings = 1, main.c
 
     /* retry while sending failed */
