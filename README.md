@@ -53,17 +53,40 @@ $ sudo ./build/streamGen -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000
 ```
 
 ```bash
+-c				: Core mask. (Options needed by DPDK)
+-n				: Number of memory channel. (Options needed by DPDK)
+-h				: Display usage infomation.
 -i pcap file	: Input file which provides network trace.
 -o interface	: Interface used to send packets.
-		(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)
--c concurrency	: Concurrency when sending streams.(default 10)  
+				(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)
+-c concurrency	: Concurrency when simulating TCP streams. (default 10)  
+-b burst		: Parameter delevered to 'burst' in rte_eth_tx_burst. (default 1)
 ```
 
-### To run with Multiple thread
+### To display statistics during run time
+
+```bash
+1. Uncomment "LIBS_CFLAGS += -DSTAT_THREAD" in Makefile
+2. Rebuild project
+```
+
+### To simulate without ACK packet
+```bash
+1. Uncomment "LIBS_CFLAGS += -DNO_ACK" in Makefile
+2. Rebuild project
+```
+
+### To enable out-of-order generation
+```bash
+1. Uncomment "LIBS_CFLAGS += -DOOO_SEND" in Makefile
+2. Rebuild project
+```
+
+### To enable Multi-threading mode
 
 ```bash
 1. Uncomment "LIBS_CFLAGS += -DSEND_THREAD" in Makefile
-3. Rebuild project
+2. Rebuild project
 ```
 
 ### To simulate SYN flood
@@ -72,6 +95,7 @@ $ sudo ./build/streamGen -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000
 $ ./build/streamGen -c 0x1 -n 1 -- -i pcapfils/xx.pcap -o 0 -m 2
 (-m : Running mode, default 1 for normal stream generation mode. 2 is given here for simulating SYN flood)
 ```
+
 ### To dump stream data in seperate files 
 
 ```bash
@@ -80,5 +104,10 @@ $ ./build/streamGen -c 0x1 -n 1 -- -i pcapfils/xx.pcap -o 0 -m 2
 3. Stream data will dumped in files/ 
 ```
 
+### To enable pdump-dpdk
+```bash
+1. Uncomment "LIBS_CFLAGS += -DUSE_PDUMP" in Makefile
+2. Rebuild project
+```
 
 ### Q&A
