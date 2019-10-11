@@ -11,6 +11,10 @@
 #include "libnids-1.24/src/nids.h"
 #include "libnids-1.24/src/hash.h"
 
+/* Packet type */
+#define CONTROL_PKT     1  // Packets in relation to connection
+#define DATA_PKT        2
+
 #ifdef SEND_THREAD
 static int                  concur_per_thread;
 #endif
@@ -64,15 +68,23 @@ shuffle_mbufs(int id)
 
 /* *
  * Description  : transmit packet with DPDK tx burst
+ * 
+ * @param p     send port
+ * @param q     send queue
+ * @param id    thread id
+ * @flag        packet type
+ *              1 for Packets in relation to connection
+ *              2 for Packets in relation to data transmission
  * */
 static void
-dpdk_send_burst(uint8_t p, uint16_t q, int id)
+dpdk_send_burst(uint8_t p, uint16_t q, int id, int flag)
 {
     uint32_t nb_tx, cnt, retry;
 
     cnt = th_info[id].tx_mbufs.len;
 #ifdef OOO_SEND
-    shuffle_mbufs(id);
+    if (flag != CONTROL_PKT)
+        shuffle_mbufs(id);
 #endif
     nb_tx = rte_eth_tx_burst(p, q, th_info[id].tx_mbufs.m_table, cnt);  //tx_rings = 1, main.c
 
@@ -101,7 +113,7 @@ dpdk_tx_flush(void)
     int i;
     for (i = 0; i < nb_snd_thread; i++ ) {
         if(th_info[i].tx_mbufs.len > 0)
-            dpdk_send_burst(snd_port, i, i);
+            dpdk_send_burst(snd_port, i, i, 2);
     }
 }
 
@@ -109,7 +121,7 @@ dpdk_tx_flush(void)
  * Description  : send packets in tx buffer with DPDK
  * */
 static inline int
-dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q, int id)
+dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q, int id, int flag)
 {
     struct rte_mbuf   *m;
     uint32_t ret;
@@ -129,10 +141,14 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q, int id)
     th_info[id].tx_mbufs.m_table[th_info[id].tx_mbufs.len++] = m;
 
     /* transmit while reaching tx_burst */
+#ifdef OOO_SEND
+    if (flag == CONTROL_PKT && th_info[id].tx_mbufs.len >= 1) {
+#else
     if (th_info[id].tx_mbufs.len >= burst) {
+#endif
         /* sending interval (burst = 1) */
         burst_delay(10, id);        
-        dpdk_send_burst(p, q, id);
+        dpdk_send_burst(p, q, id, flag);
         /* update size of th_info[id].tx_mbufs.*/
         th_info[id].tx_mbufs.len = 0;
     }
@@ -411,7 +427,7 @@ send_syn(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 0;
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
+        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id, 1);
         node->state = TCP_ST_SYN_SENT;
     } else if(node->state == TCP_ST_SYN_SENT) {
         /* syn / ack   ' <- '*/
@@ -444,7 +460,7 @@ send_syn(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 1;           // ACK
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
+        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id, 1);
         node->state = TCP_ST_SYN_RCVD;
     } else if(node->state == TCP_ST_SYN_RCVD) {
         /* ACK    '->' */
@@ -478,7 +494,7 @@ send_syn(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 1;           // ACK
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
+        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id, 1);
 
         th_info[id].tcph->psh = 1;
         node->id++;
@@ -529,7 +545,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 1;
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
+        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id, 1);
         node->state = TCP_ST_FIN_SENT_1; 
     } else if (node->state == TCP_ST_FIN_SENT_1){
         /* fin, ack   ' <- '*/
@@ -561,7 +577,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 1;           // ACK
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
+        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id, 1);
         node->state = TCP_ST_FIN_SENT_2;    
     } else if(node->state == TCP_ST_FIN_SENT_2) {
         /* ACK    '->' */
@@ -594,7 +610,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
         th_info[id].tcph->ack = 1;           // ACK
         th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
+        dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id, 1);
         
 #ifdef DUMP_PAYLOAD
         list_delete_entry(&node->list);
@@ -774,7 +790,7 @@ send_ack(struct buf_node *node, uint8_t p, uint16_t q, int id)
     th_info[id].tcph->psh = 0;
 	th_info[id].tcph->check = tcp_checksum((struct iphdr*)th_info[id].iph, (struct tcphdr*)th_info[id].tcph);	
 
-    dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id);
+    dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id, 2);
 }
 
 /* Description  : encapsulate data with headers, and send crafted packets out 
@@ -832,7 +848,7 @@ send_data_pkt(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q, int
     node->id++;
     node->seq += length;
 
-    dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen + length, p, q, id);
+    dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen + length, p, q, id, 2);
 #ifndef NO_ACK
     /* send correspond ACK */
     send_ack(node, p, q, id);
@@ -1126,7 +1142,7 @@ SYN_flood_simulator(void)
 				th_info[0].tcph->ack = 0;
 				th_info[0].tcph->check = tcp_checksum((struct iphdr*)th_info[0].iph, (struct tcphdr*)th_info[0].tcph);	
 
-				dpdk_send_pkt((uint8_t *)th_info[0].pkt, HEADER_LEN + optlen, snd_port, 0, 0);
+				dpdk_send_pkt((uint8_t *)th_info[0].pkt, HEADER_LEN + optlen, snd_port, 0, 0, 1);
                 set_field(buf_entry);
             }
         }
