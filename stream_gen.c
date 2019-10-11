@@ -142,7 +142,7 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q, int id, int flag)
 
     /* transmit while reaching tx_burst */
 #ifdef OOO_SEND
-    if (flag == CONTROL_PKT && th_info[id].tx_mbufs.len >= 1) {
+    if ((flag == CONTROL_PKT && th_info[id].tx_mbufs.len >= 1) || th_info[id].tx_mbufs.len >= burst) {
 #else
     if (th_info[id].tx_mbufs.len >= burst) {
 #endif
