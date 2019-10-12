@@ -1027,9 +1027,8 @@ counter (void)
             if (!file_fd) {
                 perror("fopen");
                 return;
-            }    
-            //fputs((const char *)tup_str, file_fd);
-            fputs((const char *)(buf_entry->tot_buf), file_fd);
+            }
+            fwrite((const char *)(buf_entry->tot_buf), sizeof(char), buf_entry->len, file_fd);
             fclose(file_fd);
 #endif
             cnt++;
