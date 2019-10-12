@@ -113,7 +113,7 @@ dpdk_tx_flush(void)
     int i;
     for (i = 0; i < nb_snd_thread; i++ ) {
         if(th_info[i].tx_mbufs.len > 0)
-            dpdk_send_burst(snd_port, i, i, 2);
+            dpdk_send_burst(snd_port, i, i, 1);
     }
 }
 
@@ -1197,6 +1197,7 @@ send_streams(void)
                     /* TODO: modify delivered queue number for multi-threading mode */
                     if (buf_entry->state == TCP_ST_FIN_SENT_2) {
                         send_packet(buf_entry, n_part, snd_port, 0, 0);
+                        dpdk_tx_flush();
                         break;
                     } else {
                         send_packet(buf_entry, n_part, snd_port, 0, 0);
