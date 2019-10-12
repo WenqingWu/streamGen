@@ -26,7 +26,7 @@
 #define PACKET_LEN 			1600     /* a little bigger than MTU */
 #define DEFAULT_BURST_SIZE  1
 #define MAX_BURST           128
-#define PKT_RETRY_COUNT     10
+#define PKT_RETRY_COUNT     1000
 #define TX_DELAY_TIME       20
 
 #define RX_RING_SIZE 		128
