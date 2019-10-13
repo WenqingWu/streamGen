@@ -2,7 +2,7 @@
 
 TCP stream generator
 
-![streamGen-structure](images/streamGen-Arch.png)
+![streamGen-structure](images/streamGen-structure.png)
 
 ### Files
 
