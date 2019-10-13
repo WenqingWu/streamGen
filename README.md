@@ -1,6 +1,8 @@
 ## streamGen
 
-stream generator
+TCP stream generator
+
+![streamGen-structure](images/streamGen-Arch.png)
 
 ### Files
 
