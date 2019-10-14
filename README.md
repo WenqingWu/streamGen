@@ -18,7 +18,7 @@ TCP stream generator
 
 ### Dependency
 
-Intel-DPDK libpcap libnet libnids numa-devel 
+Intel-DPDK libpcap libnet libnids numa-devel gmp-devel
 
 ### Build
 
@@ -55,14 +55,14 @@ $ sudo ./build/streamGen -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000
 ```
 
 ```bash
--c				: Core mask. (Options needed by DPDK)
--n				: Number of memory channel. (Options needed by DPDK)
--h				: Display usage infomation.
+-c <core_mask>	: Core mask. (Options needed by DPDK)
+-n <channels>   : Number of memory channel. (Options needed by DPDK)
+-h			: Display usage infomation.
 -i pcap file	: Input file which provides network trace.
 -o interface	: Interface used to send packets.
-				(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)
+			(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)
 -c concurrency	: Concurrency when simulating TCP streams. (default 10)  
--b burst		: Parameter delevered to 'burst' in rte_eth_tx_burst. (default 1)
+-b <burst>		: Parameter delevered to 'burst' in rte_eth_tx_burst. (default 1)
 ```
 
 ### To display statistics during run time
