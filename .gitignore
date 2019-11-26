@@ -1,0 +1,6 @@
+build/
+*.o
+*.smp
+.DS_Store
+files/
+files/*
