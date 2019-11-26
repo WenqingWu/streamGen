@@ -42,9 +42,7 @@ include $(RTE_SDK)/mk/rte.vars.mk
 APP = streamGen
 
 # all source are stored in SRCS-y
-# SRCS-y := main.c stream_gen.c
-
-SRCS-y := main.c stream_gen.c
+SRCS-y := main.c stream_gen.c string_matcher.c
 
 LDLIBS     = 
 
@@ -55,15 +53,41 @@ LNET_CFLAGS = -I/usr/local/include
 LNETLIB     = -lnet
 
 LIBS_CFLAGS = -Ilibnids-1.24/src -Iinclude  $(PCAP_CFLAGS) $(LNET_CFLAGS) 
-# LIBS_CFLAGS += -DUSE_PDUMP
-# LIBS_CFLAGS += -DSEND_THREAD
 
-#LIBS_CFLAGS += -DDUMP_PAYLOAD
-#LIBS_CFLAGS += -DONLY_REQUEST
+## Enable statistics
+LIBS_CFLAGS += -DSTAT_THREAD
+
+## Only store request data
+LIBS_CFLAGS += -DONLY_REQUEST
+
+## Out-of-order generation support
+# LIBS_CFLAGS += -DOOO_SEND
+
+## Dump payload data into seperate files according to tuple-4
+## During generation process
+# LIBS_CFLAGS += -DDUMP_PAYLOAD
+
+## Dump payload data into seperate files according to tuple-4
+## Defore generation process
+# LIBS_CFLAGS += -DDUMP_PAYLOAD_ALL
+
+## USE original tuple4
+# LIBS_CFLAGS += -DORIGINAL_TUPLE4
+
+## stream data only used for one time
+# LIBS_CFLAGS += -DNON_REUSE
+
+## Do not send ACK after a data packet
 #LIBS_CFLAGS += -DNO_ACK
 
-LIBS_CFLAGS += -DOOO_SEND
-LIBS_CFLAGS += -DSTAT_THREAD
+## Enable dpdk-pdump	
+# LIBS_CFLAGS += -DUSE_PDUMP
+
+## Generator with multiple threads
+# LIBS_CFLAGS += -DSEND_THREAD
+
+## Generation with only one TCP stream
+# LIBS_CFLAGS += -DSINGLE_STREAM
 
 CFLAGS 		+= -g -O2 $(LIBS_CFLAGS)
 CFLAGS 		+= $(WERROR_FLAGS)

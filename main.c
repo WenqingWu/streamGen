@@ -60,6 +60,7 @@ bool 		dst_port_fixed = false;
 uint16_t	dst_port;
 bool 		get_dst_from_file = false;
 char		dst_addr_file[20];
+int 		frag_rate = 100;
 
 #define S_TO_TSC(t) rte_get_tsc_hz() * (t)
 /* delay for 't' seconds */
@@ -404,6 +405,9 @@ lcore_main(void)
     /* store stream data read from pcap file */
     printf("\nReading stream data from pcap file...\n");
     nids_run();
+
+	/* Initialization of Sunday algorithm */
+	sunday_pre("\r\n\r\n", 4);
 	
     printf("\nStart sending packets. [Ctrl+C to quit]\n");
 #ifdef SEND_THREAD
@@ -469,9 +473,11 @@ print_usage(const char * prgname)
         "\t-b BURST: \n"
         "\t\tTransmiting burst while sending with DPDK (default 1, maximum 128)\n"
 		"\t-d DEST_PORT: \n"
-		"\t\t Give a fixed dest_port for SYN Flooding.\n"
+		"\t\tGive a fixed dest_port for SYN Flooding.\n"
+		"\t-r RATE:\n"
+		"\t\tRate of fragmented packets.(default 100 for 100%)\n"
 		"\t-f FILE NAME: \n"
-		"\t\t File which contains dest IP address and dest MAC address.\n"
+		"\t\tFile which contains dest IP address and dest MAC address.\n"
         "\t-m RUNNING MODE:\n"
         "\t\t1, Normal Sending mode\n"
         "\t\t2, Simulating SYN flood\n\n",
@@ -484,7 +490,7 @@ get_options(int argc, char *argv[])
 {
     int opt = 0;
 
-    while ((opt = getopt(argc, argv, "hi:o:m:b:c:d:f:l:t:T:")) != -1) {
+    while ((opt = getopt(argc, argv, "hi:o:m:b:c:d:f:l:r:t:T:")) != -1) {
         switch(opt) {
             case 'h':
                 print_usage(argv[0]);
@@ -510,20 +516,25 @@ get_options(int argc, char *argv[])
             case 'b':
               	burst = (uint16_t)atoi(optarg);
                 if (burst < 1 || burst >= MAX_BURST) {
-                    rte_exit(EXIT_FAILURE, "\nInvalid burst.(1 ~ %d).\n", MAX_BURST);
+                    rte_exit(EXIT_FAILURE, "\nInvalid burst (1 ~ %d).\n", MAX_BURST);
                 }
               	break;
             case 'm':
               	mode_run = atoi(optarg);
                 if (mode_run < 1 || mode_run > 2) {
-                    printf("\nInvalid running mode.(2 modes supported for now.)\n");
-					exit(1);
+                    rte_exit(EXIT_FAILURE, "\nInvalid running mode (2 modes supported for now).\n");
+                }
+              	break;
+            case 'r':
+              	frag_rate = atoi(optarg);
+                if (frag_rate < 0 || frag_rate > 100) {
+                    rte_exit(EXIT_FAILURE, "\nInvalid fragment rate (0 ~ 100). \n");
                 }
               	break;
             case 't':
               	nb_snd_thread = atoi(optarg);
 				if (nb_snd_thread < 1 || nb_snd_thread > NUM_SEND_THREAD) {
-					rte_exit(EXIT_FAILURE, "\nInvalid number of thread.(1 ~ %d)\n", NUM_SEND_THREAD);
+					rte_exit(EXIT_FAILURE, "\nInvalid number of thread (1 ~ %d).\n", NUM_SEND_THREAD);
 				}
               	break;
 #ifdef STAT_THREAD

@@ -10,10 +10,12 @@
 #include "include/tcp_header.h"
 #include "libnids-1.24/src/nids.h"
 #include "libnids-1.24/src/hash.h"
+#include "include/string_matcher.h"
 
 /* Packet type */
-#define CONTROL_PKT     1  // Packets in relation to connection
-#define DATA_PKT        2
+#define CONTROL_PKT		1  // Packets in relation to connection
+#define DATA_PKT		2
+
 
 #ifdef SEND_THREAD
 static int                  concur_per_thread;
@@ -24,6 +26,30 @@ char dst_ip_addr[16];
 
 uint8_t src_mac[6] = {0x90, 0xe2, 0xba, 0x14, 0xbe, 0xae}; //b0
 uint8_t dst_mac[6] = {0x00, 0x30, 0x48, 0xf7, 0xc3, 0x4a}; //b1
+
+static int pkt_type_cnt = 0;
+
+/* Description: Get packet type
+ *
+ * @param upper_bound	Upper bound of fragment rate
+ * @return
+ * 		FRAGMENT_PKT	1
+ * 		COMPLETE_PKT	2
+ * */
+static int
+get_pkt_type(const int upper_bound)
+{
+	pkt_type_cnt += 1;
+	if (pkt_type_cnt <= upper_bound) {
+		return FRAGMENT_PKT;
+	} else if (pkt_type_cnt <= MAX_RATE_BOUND) {
+		return COMPLETE_PKT;
+	} else {
+		pkt_type_cnt = 0;
+		return COMPLETE_PKT;
+	}
+}
+
 
 #define US_TO_TSC(t) ((rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S ) * (t)
 /* * 
@@ -49,7 +75,7 @@ burst_delay(uint16_t t, int id)
 #ifdef OOO_SEND
 /* Shuffle for out-of-order support 
  * */
-static void
+static void 
 shuffle_mbufs(int id)
 {
     int size = th_info[id].tx_mbufs.len;
@@ -68,13 +94,13 @@ shuffle_mbufs(int id)
 
 /* *
  * Description  : transmit packet with DPDK tx burst
- * 
- * @param p     send port
- * @param q     send queue
- * @param id    thread id
- * @flag        packet type
- *              1 for Packets in relation to connection
- *              2 for Packets in relation to data transmission
+ *
+ * @param p		send port
+ * @param q		send queue
+ * @param id 	thread id
+ * @flag		packet type
+ * 				1 for Packets in relation to connection
+ * 				2 for Packets in relation to data transmission
  * */
 static void
 dpdk_send_burst(uint8_t p, uint16_t q, int id, int flag)
@@ -82,10 +108,12 @@ dpdk_send_burst(uint8_t p, uint16_t q, int id, int flag)
     uint32_t nb_tx, cnt, retry;
 
     cnt = th_info[id].tx_mbufs.len;
+
 #ifdef OOO_SEND
-    if (flag != CONTROL_PKT)
-        shuffle_mbufs(id);
+	if (flag != CONTROL_PKT)
+		shuffle_mbufs(id);
 #endif
+
     nb_tx = rte_eth_tx_burst(p, q, th_info[id].tx_mbufs.m_table, cnt);  //tx_rings = 1, main.c
 
     /* retry while sending failed */
@@ -142,11 +170,12 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q, int id, int flag)
 
     /* transmit while reaching tx_burst */
 #ifdef OOO_SEND
-    if ((flag == CONTROL_PKT && th_info[id].tx_mbufs.len >= 1) || th_info[id].tx_mbufs.len >= burst) {
+    if ((flag == CONTROL_PKT && th_info[id].tx_mbufs.len >= 1 ) || 
+		 th_info[id].tx_mbufs.len >= burst) {
 #else
     if (th_info[id].tx_mbufs.len >= burst) {
 #endif
-        /* sending interval (burst = 1) */
+        /* sending interval*/
         burst_delay(10, id);        
         dpdk_send_burst(p, q, id, flag);
         /* update size of th_info[id].tx_mbufs.*/
@@ -162,7 +191,7 @@ dpdk_send_pkt(uint8_t *pkt, int len, uint8_t p, uint16_t q, int id, int flag)
 static inline void 
 set_field(struct buf_node* node)
 {
-#ifdef DUMP_PAYLOAD
+#ifdef ORIGINAL_TUPLE4
     node->saddr = node->tup.saddr;
     node->daddr = node->tup.daddr;
     node->sport = node->tup.source;
@@ -612,7 +641,7 @@ send_fin(struct buf_node* node, uint8_t p, uint16_t q, int id)
 
         dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id, 1);
         
-#ifdef DUMP_PAYLOAD
+#ifdef NON_REUSE
         list_delete_entry(&node->list);
         free(node);
         return;
@@ -793,6 +822,39 @@ send_ack(struct buf_node *node, uint8_t p, uint16_t q, int id)
     dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen, p, q, id, 2);
 }
 
+#ifdef DUMP_PAYLOAD
+static void
+dump_data(struct buf_node* node, int len)
+{
+    char file_name[30];
+    char tup_str[50];
+    char src_addr[10];
+    char dst_addr[10];
+    struct in_addr addr_s, addr_d;
+
+    addr_s.s_addr = node->saddr;
+    addr_d.s_addr = node->daddr;
+
+    strcpy(src_addr, inet_ntoa(addr_s));
+    strcpy(dst_addr, inet_ntoa(addr_d));
+
+    sprintf(tup_str, "%s:%d-%s:%d",
+            src_addr, node->sport,
+            dst_addr, node->dport);
+    sprintf(file_name, "files/file_%s", tup_str);
+    FILE *file_fd = fopen(file_name, "a+");
+    if (!file_fd) {
+        perror("fopen");
+        return;
+    }
+	fwrite("\n--------\n", sizeof(char), 10, file_fd);
+    fwrite((const char *)((uint8_t *)node->tot_buf + node->offset), sizeof(char), len, file_fd);
+	fwrite("\n--------\n", sizeof(char), 10, file_fd);
+    fclose(file_fd);
+}
+
+#endif //DUMP_PAYLOAD
+
 /* Description  : encapsulate data with headers, and send crafted packets out 
  * @ node       : buf_node which contains data to send
  * @ offset     : offset of the sending data
@@ -842,6 +904,11 @@ send_data_pkt(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q, int
 	if (rest_len < 0)
 		fprintf(stderr, "%d %d %d %d\n", length, node->len, node->offset, rest_len);
 	memcpy(((uint8_t *)th_info[id].pkt + payload_offset), ((uint8_t *)node->tot_buf + node->offset), length);
+
+#ifdef DUMP_PAYLOAD
+    dump_data(node, length);
+#endif 
+
     /* update data offset */
     node->offset += length;
     /* update header fields */
@@ -849,9 +916,9 @@ send_data_pkt(struct buf_node *node, uint32_t length, uint8_t p, uint16_t q, int
     node->seq += length;
 
     dpdk_send_pkt((uint8_t *)th_info[id].pkt, HEADER_LEN + optlen + length, p, q, id, 2);
-#ifndef NO_ACK
     /* send correspond ACK */
-    send_ack(node, p, q, id);
+#ifndef NO_ACK
+	send_ack(node, p, q, id);
 #endif
 }
 
@@ -924,11 +991,34 @@ store_stream_data(struct tuple4 tup, char *data, int length, int flag)
 	return 1; 
 }
 
+/* Get length (40 ~ MAX_SEG_SIZE bytes)of payload */
+static int
+get_data_len(struct buf_node *node, int n_parts)
+{
+	int length;
+
+	/* TODO: give a appropriate data length randomly*/
+	if (is_len_fixed) {
+		length = len_cut;
+	} else {
+		length = node->len / n_parts;
+	}
+	
+	if (length < 40) { // Ignore small packets 
+		length = 40;
+	} else if (length > MAX_SEG_SIZE) {
+		length = MAX_SEG_SIZE;
+	}
+
+	return length;
+}
+
 /* send packet according to TCP state */
 static void
-send_packet(struct buf_node *node, int n, uint8_t p, uint16_t q, int id)
+send_packet(struct buf_node *node, int n_parts, uint8_t p, uint16_t q, int id)
 {
     uint32_t length;
+	int 	type;
 
     /* sending packet according to TCP state */
     if(node->state == TCP_ST_CLOSED) {
@@ -939,19 +1029,21 @@ send_packet(struct buf_node *node, int n, uint8_t p, uint16_t q, int id)
         }
     } else if (node->state == TCP_ST_SYN_SENT || node->state == TCP_ST_SYN_RCVD) {
         send_syn(node, p, q, id);
-    } else if (node->state == TCP_ST_ESTABLISHED) {
-		/* TODO: give a appropriate data length randomly*/
-		if (is_len_fixed) {
-			length = len_cut;
-		} else {
-			length = node->len / n;
+    } else if (node->state == TCP_ST_ESTABLISHED) { /* Transmit data */
+		type = get_pkt_type(frag_rate);
+		if (type == FRAGMENT_PKT) {
+			length = get_data_len(node, n_parts);
+		} else { // COMPLETE_PKT
+			length = sunday_match((uint8_t *)node->tot_buf + node->offset, node->len - node->offset,
+									"\r\n\r\n", 4);	
+			if (length < 0) { // No "\r\n" found;
+				length = node->len - node->offset;
+			}
+			if (length > MAX_SEG_SIZE) { // Jumbo packet
+				length = get_data_len(node, n_parts);
+			}
 		}
-		
-		if (length < 5) {
-			length = node->len;
-		} else if (length > MAX_SEG_SIZE) {
-			length = MAX_SEG_SIZE;
-		}
+
         send_data_pkt(node, length, p, q, id);
     } else if (node->state == TCP_ST_CLOSING || node->state == TCP_ST_FIN_SENT_1 
                                              || node->state == TCP_ST_FIN_SENT_2) {
@@ -1001,12 +1093,18 @@ counter (void)
 #ifdef DUMP_PAYLOAD
     system("rm -rf files/*");
 #endif
+#ifdef SINGLE_STREAM
+    int single_flag = 1; 
+#endif
 
     for (i = 0; i < size; i++) {
         struct list_head *head = &hash_buf.buf_list[i];
         struct buf_node *buf_entry;
         list_for_each_entry(buf_entry, head, list) {
-#ifdef DUMP_PAYLOAD
+#ifdef DUMP_PAYLOAD_ALL
+#ifdef SINGLE_STREAM
+            if (single_flag && buf_entry->len >= 1500) {
+#endif
             char file_name[30];
             char tup_str[50];
 			char src_addr[10];
@@ -1027,10 +1125,14 @@ counter (void)
             if (!file_fd) {
                 perror("fopen");
                 return;
-            }
-            fwrite((const char *)(buf_entry->tot_buf), sizeof(char), buf_entry->len, file_fd);
+            }    
+			fwrite((const char *)(buf_entry->tot_buf), sizeof(char), buf_entry->len, file_fd);
             fclose(file_fd);
+#ifdef SINGLE_STREAM
+                single_flag = 0;
+            }
 #endif
+#endif //DUMP_PAYLOAD_ALL
             cnt++;
         }
     }
@@ -1176,7 +1278,7 @@ send_streams(void)
     /* initialize packet header (ethernet header; IP header; TCP header)*/
 	prepare_header(0);
 
-    n_part = 25 + rand() % 10;
+    n_part = 1 + rand() % 10;
     while(!force_quit) {
         cnt = 0;
         reach_concur = false;
@@ -1190,13 +1292,24 @@ send_streams(void)
                 if (is_len_fixed && buf_entry->len < len_cut) {
                     continue;
                 } 	
+#ifdef SINGLE_STREAM
+                if (buf_entry->len < 1500)
+                    continue;
+                while (1) {
+                    if (buf_entry->state == TCP_ST_FIN_SENT_2) {
+                        send_packet(buf_entry, n_part, snd_port, 0, 0);
+						dpdk_tx_flush();
+                        return;
+                    }
+                    send_packet(buf_entry, n_part, snd_port, 0, 0);
+                }
+#endif
                 /* Keep sending several packets of a stream */
                 n_snd = rand() % 3 + 1;         // 1 ~ 3
                 while (n_snd--) {
                     /* TODO: modify delivered queue number for multi-threading mode */
                     if (buf_entry->state == TCP_ST_FIN_SENT_2) {
                         send_packet(buf_entry, n_part, snd_port, 0, 0);
-                        dpdk_tx_flush();
                         break;
                     } else {
                         send_packet(buf_entry, n_part, snd_port, 0, 0);

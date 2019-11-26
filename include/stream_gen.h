@@ -104,6 +104,7 @@ extern bool 			dst_port_fixed;
 extern bool 			get_dst_from_file;
 extern char 			dst_addr_file[20];
 extern uint16_t			dst_port;
+extern int				frag_rate;
 
 extern volatile bool    force_quit;
 extern int      		nb_stream;  // number of streams stored in buffer 
