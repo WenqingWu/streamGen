@@ -9,12 +9,13 @@ TCP stream generator
 ./   
  |__ main.c   
  |__ stream_gen.c   
+ |__ string_matcher.c
  |__ include/   
  |__ libnids-1.24/   
  |__ pcapfiles/  
  |__ Makefile   
  |__ setup.sh   
- |__ run.sh   
+ |__ Run.sh   
 
 ### Dependency
 
@@ -51,30 +52,24 @@ You may run "sudo ./build/streamGen -c 0x1 -n 1 -- -h" for help information.
 To start streamGen, you need to give a pcap file as input, for example,
 
 ```bash
-$ sudo ./build/streamGen -c 0x1 -n 1 -- -i pcapfiles/dump5.pcap -o 0 -c 1000
+$ sudo ./build/streamGen -c 0x1 -n 1 -- -i pcapfiles/sample.pcap -o 0 -c 1000 - r 10
 ```
 
 ```bash
--c <core_mask>	: Core mask. (Options needed by DPDK)
--n <channels>   : Number of memory channel. (Options needed by DPDK)
--h			: Display usage infomation.
--i pcap file	: Input file which provides network trace.
--o interface	: Interface used to send packets.
-			(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)
--c concurrency	: Concurrency when simulating TCP streams. (default 10)  
--b <burst>		: Parameter delevered to 'burst' in rte_eth_tx_burst. (default 1)
+-c <core_mask>		: Core mask. (Options needed by DPDK)
+-n <channels>		: Number of memory channel. (Options needed by DPDK)
+-i <pcap file>		: Input file which provides network trace.
+-o <interface>		: Interface used to send packets.
+					(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)
+-c <concurrency>	: Concurrency when simulating TCP streams. (default 10)  
+-b <burst>			: Parameter delevered to 'burst' in rte_eth_tx_burst. (default 1)
+-r <fragment rate>	: Rate(x100) of fragmented packets (default 100, that is, 100%) 
 ```
 
 ### To display statistics during run time
 
 ```bash
 1. Uncomment "LIBS_CFLAGS += -DSTAT_THREAD" in Makefile
-2. Rebuild project
-```
-
-### To simulate without ACK packet
-```bash
-1. Uncomment "LIBS_CFLAGS += -DNO_ACK" in Makefile
 2. Rebuild project
 ```
 
@@ -98,10 +93,10 @@ $ ./build/streamGen -c 0x1 -n 1 -- -i pcapfils/xx.pcap -o 0 -m 2
 (-m : Running mode, default 1 for normal stream generation mode. 2 is given here for simulating SYN flood)
 ```
 
-### To dump stream data in seperate files 
+### To dump stream data into seperate files during generation process 
 
 ```bash
-1. Uncomment "#LIBS_CFLAGS += -DDUMP_PAYLOAD" and "#LIBS_CFLAGS += -DONLY_REQUEST " in Makefile
+1. Uncomment "#LIBS_CFLAGS += -DDUMP_PAYLOAD" in Makefile
 2. Rebuild and Run 
 3. Stream data will dumped in files/ 
 ```
