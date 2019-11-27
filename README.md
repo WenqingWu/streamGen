@@ -67,7 +67,7 @@ $ sudo ./build/streamGen -c 0x1 -n 1 -- -i pcapfiles/sample.pcap -o 0 -c 1000 - 
 -o <interface>		: Interface used to send packets.
 					(e.g. 1 for port1 with DPDK, eth1 for libpcap, default 0)
 -c <concurrency>	: Concurrency when simulating TCP streams. (default 10)  
--b <burst>			: Parameter delevered to 'burst' in rte_eth_tx_burst. (default 1)
+-b <burst>		: Parameter delivered to 'burst' in rte_eth_tx_burst. (default 1)
 -r <fragment rate>	: Rate(x100) of fragmented packets (default 100, that is, 100%) 
 ```
 
