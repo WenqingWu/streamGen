@@ -9,7 +9,7 @@ TCP stream generator
 ./   
  |__ main.c   
  |__ stream_gen.c   
- |__ string_matcher.c
+ |__ string_matcher.c	 
  |__ include/   
  |__ libnids-1.24/   
  |__ pcapfiles/  
@@ -19,7 +19,12 @@ TCP stream generator
 
 ### Dependency
 
-Intel-DPDK libpcap libnet libnids numa-devel gmp-devel
+Intel-DPDK  
+libpcap  
+libnet  
+libnids  
+numa-devel  
+gmp-devel
 
 ### Build
 
